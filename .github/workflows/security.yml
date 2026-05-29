@@ -33,24 +33,24 @@ jobs:
           ./gitleaks git --config .gitleaks.toml --redact --no-banner .
 
   trivy-config:
-    name: trivy (dockerfile + chart misconfig)
+    name: trivy (dockerfile misconfig)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
-          scan-ref: .
+          # Scoped to the Dockerfile — the one config artifact this repo owns
+          # and can remediate. The Helm chart is covered by the ci workflow's
+          # helm lint + template steps; platform.yaml (a Platform CR) and
+          # gitops/applicationset-entry.yaml (an ArgoCD ApplicationSet) are not
+          # standard workloads, so trivy's generic Kubernetes checks misfire on
+          # them rather than surfacing real findings.
+          scan-ref: Dockerfile
           severity: HIGH,CRITICAL
           exit-code: "1"
-          ignore-unfixed: true
           format: sarif
           output: trivy-config.sarif
-          # Helm rendering is covered by the ci workflow's helm lint +
-          # template steps. trivy's helm scanner uses a default k8s client
-          # that can't render this chart's required per-env values without
-          # overrides — those errors aren't security findings.
-          skip-dirs: "chart"
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
@@ -66,6 +66,11 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          # Dependency vulns only. Secret scanning is gitleaks' job (above) and
+          # misconfig is the trivy-config job's — running them here too would
+          # double-flag the same PII-scrubber test fixtures. ignore-unfixed
+          # keeps the gate to actionable (patch-available) CVEs.
+          scanners: vuln
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true

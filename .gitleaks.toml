@@ -15,6 +15,10 @@ paths = [
   # The committed env template — placeholders only, no real secrets. Anchored
   # to the exact repo-root path so it never matches a real `.env*` file.
   '''^\.env\.example$''',
+  # PII-scrubber unit-test fixtures: deliberately fake AWS keys, Slack tokens,
+  # OpenAI keys, and JWTs (the canonical example JWT) that exercise the
+  # redaction regexes. Scoped to this one test file — not real credentials.
+  '''^src/audit/pii-scrubber\.test\.ts$''',
 ]
 regexes = [
   # `replace-me` / `replace_me` / `replace-with-...` placeholders used across
