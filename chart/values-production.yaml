@@ -1,0 +1,48 @@
+# Production delta.
+image:
+  tag: production
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+ingress:
+  hosts:
+    - host: almanac.example.com
+      paths:
+        - path: /health
+          pathType: Exact
+        - path: /oauth
+          pathType: Prefix
+
+externalSecret:
+  remoteRefSecret: almanac/production/app-secrets
+  dbCredentialsSecret: almanac/production/db-credentials
+
+env:
+  NODE_ENV: production
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=almanac,service.version=0.1.0,deployment.environment=production,agents.tenant=protohype,agents.platform=almanac"
+
+aws:
+  # Fill from landing-zone `almanac-platform` (production) output: irsa_role_arn.
+  # `tofu -chdir=live/aws/workload-prod/us-west-2/production/almanac-platform output -raw irsa_role_arn`
+  platformRoleArn: ""
+
+tenantInfra:
+  # Fill the empties below from the landing-zone almanac-platform production
+  # outputs (terragrunt output -json). Slot names match output names 1:1.
+  dynamodbTableTokens: almanac-tokens-production
+  dynamodbTableAudit: almanac-audit-production
+  dynamodbTableIdentityCache: almanac-identity-cache-production
+  sqsAuditQueueUrl: ""
+  sqsAuditDlqUrl: ""
+  redisUrl: ""
+  kmsKeyId: ""
+  pgHost: ""
+  auditBucket: ""

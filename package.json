@@ -1,0 +1,59 @@
+{
+  "name": "almanac",
+  "version": "0.1.0",
+  "description": "Almanac — Slack bot for NanoCorp knowledge retrieval",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "docs": "echo 'Docs: README.md, AGENTS.md, ARCHITECTURE.md, docs/'",
+    "install:all": "npm ci && npm --prefix packages/oauth ci",
+    "build:oauth": "npm --prefix packages/oauth run build",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "audit:prod": "npm audit --audit-level=high --omit=dev",
+    "chart:lint": "helm lint chart",
+    "chart:template:staging": "helm template almanac chart -f chart/values-staging.yaml",
+    "chart:template:production": "helm template almanac chart -f chart/values-production.yaml"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1030.0",
+    "@aws-sdk/client-dynamodb": "^3.1030.0",
+    "@aws-sdk/client-kms": "^3.1030.0",
+    "@aws-sdk/client-s3": "^3.1030.0",
+    "@aws-sdk/client-sqs": "^3.1030.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
+    "@slack/bolt": "^4.7.0",
+    "@smithy/node-http-handler": "^4.5.2",
+    "almanac-oauth": "file:./packages/oauth",
+    "ioredis": "^5.10.1",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.2",
+    "@types/pg": "^8.20.0",
+    "@vitest/coverage-v8": "^4.1.4",
+    "aws-sdk-client-mock": "^4.1.0",
+    "eslint": "^10.2.0",
+    "prettier": "^3.8.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

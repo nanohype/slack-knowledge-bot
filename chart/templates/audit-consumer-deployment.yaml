@@ -1,0 +1,102 @@
+{{- if .Values.auditConsumer.enabled }}
+# Audit consumer Deployment — runs dist/bin/audit-consumer.js, which
+# long-polls the audit SQS queue and writes to DynamoDB + S3. Replaces
+# the CDK-era Lambda whose inline JS lived in
+# infra/lib/almanac-stack.ts (deleted in PR #26).
+#
+# Scaled by KEDA against the audit queue depth — see ScaledObject below.
+# The Deployment ships with replicas: 0 baseline; KEDA scales up when the
+# queue grows. The minReplicaCount in the ScaledObject can be raised if
+# you want a hot pod always available.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "almanac.fullname" . }}-audit-consumer
+  labels:
+    {{- include "almanac.labels" . | nindent 4 }}
+    almanac.io/service: audit-consumer
+spec:
+  # KEDA owns replicas via the ScaledObject below. The initial state is 0
+  # (no work in the queue at install time); KEDA scales up when messages
+  # appear and back down to 0 after `cooldownPeriod` of empty polls.
+  replicas: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "almanac.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      almanac.io/service: audit-consumer
+  template:
+    metadata:
+      labels:
+        {{- include "almanac.labels" . | nindent 8 }}
+        almanac.io/service: audit-consumer
+    spec:
+      serviceAccountName: {{ include "almanac.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # 45s — gives audit-consumer.ts's drain timer (30s) headroom plus
+      # SIGTERM-to-server.close() margin.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: audit-consumer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "--enable-source-maps", "dist/bin/audit-consumer.js"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          env:
+            - name: AWS_REGION
+              value: {{ .Values.env.AWS_REGION | quote }}
+            - name: SQS_AUDIT_QUEUE_URL
+              value: {{ .Values.tenantInfra.sqsAuditQueueUrl | quote }}
+            - name: DYNAMODB_TABLE_AUDIT
+              value: {{ .Values.tenantInfra.dynamodbTableAudit | quote }}
+            - name: AUDIT_BUCKET
+              value: {{ .Values.tenantInfra.auditBucket | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: almanac-audit-consumer
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ .Values.env.OTEL_EXPORTER_OTLP_PROTOCOL | quote }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ .Values.env.OTEL_RESOURCE_ATTRIBUTES | quote }}
+            - name: NODE_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: {{ .Values.env.LOG_LEVEL | default "info" | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.auditConsumer.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

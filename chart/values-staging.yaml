@@ -1,0 +1,40 @@
+# Staging delta.
+image:
+  tag: staging
+
+replicaCount: 1
+
+ingress:
+  hosts:
+    - host: almanac-staging.example.com
+      paths:
+        - path: /health
+          pathType: Exact
+        - path: /oauth
+          pathType: Prefix
+
+externalSecret:
+  remoteRefSecret: almanac/staging/app-secrets
+  dbCredentialsSecret: almanac/staging/db-credentials
+
+env:
+  NODE_ENV: production
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=almanac,service.version=0.1.0,deployment.environment=staging,agents.tenant=protohype,agents.platform=almanac"
+
+aws:
+  # Fill from landing-zone `almanac-platform` (staging) output: irsa_role_arn.
+  # `tofu -chdir=live/aws/workload-staging/us-west-2/staging/almanac-platform output -raw irsa_role_arn`
+  platformRoleArn: ""
+
+tenantInfra:
+  # Fill the empties below from the landing-zone almanac-platform staging
+  # outputs (terragrunt output -json). Slot names match output names 1:1.
+  dynamodbTableTokens: almanac-tokens-staging
+  dynamodbTableAudit: almanac-audit-staging
+  dynamodbTableIdentityCache: almanac-identity-cache-staging
+  sqsAuditQueueUrl: ""
+  sqsAuditDlqUrl: ""
+  redisUrl: ""
+  kmsKeyId: ""
+  pgHost: ""
+  auditBucket: ""

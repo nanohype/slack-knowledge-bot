@@ -1,0 +1,142 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: build + lint + typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install (app)
+        # `npm install` instead of `npm ci`: the lockfile is generated on
+        # macOS and omits Linux platform-specific optional deps that
+        # vitest/rolldown pull in. `npm install` resolves them on the Linux
+        # runner; version pinning still comes from the lockfile. Switch back
+        # to `npm ci` once a cross-platform lockfile is committed.
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install (almanac-oauth package)
+        run: npm install --prefer-offline --no-audit --no-fund
+        working-directory: packages/oauth
+
+      - name: Lint (almanac-oauth)
+        run: npm run lint
+        working-directory: packages/oauth
+
+      - name: Typecheck (almanac-oauth)
+        run: npm run typecheck
+        working-directory: packages/oauth
+
+      - name: Test (almanac-oauth)
+        run: npm test
+        working-directory: packages/oauth
+
+      - name: Build almanac-oauth
+        run: npm run build
+        working-directory: packages/oauth
+
+      - name: Audit (production deps)
+        run: npm run audit:prod
+
+      - name: Check (typecheck + lint + format:check + test)
+        run: npm run check
+
+      - name: SDK-mock ban invariant (ports-not-patches)
+        # Ports, not SDK patches: every cross-boundary service is a
+        # createXxx(deps) factory. Tests inject fakes implementing the typed
+        # port — `vi.mock("<sdk-package>")` would patch the SDK module
+        # itself, defeating the point. Relative-path mocks are fine (they're
+        # internal modules). AWS SDK clients use aws-sdk-client-mock, which
+        # attaches to the client instance, not `vi.mock`.
+        run: |
+          VIOLATIONS=$(grep -RnE "vi\.mock\(['\"](@aws-sdk/|@slack/bolt|@opentelemetry/|ioredis|pg|almanac-oauth|node:crypto|node:http)" src --include='*.test.ts' || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::SDK-mock ban: vi.mock of an SDK package is forbidden — inject a port fake instead."
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "SDK-mock ban invariant holds"
+
+      - name: Bare-fetch ban invariant
+        # `fetch(` outside explicitly permitted modules: every HTTP-boundary
+        # service receives `fetchImpl: typeof fetch` so tests can pass
+        # `vi.fn<typeof fetch>()`. Call-sites that MUST construct fetch
+        # directly (bootstrap, OAuth module bridge) are whitelisted; anything
+        # else must accept fetch via deps. Opt-out on a single line with the
+        # marker `// allow-fetch`.
+        run: |
+          VIOLATIONS=$(grep -RnE "(^|[^.A-Za-z_])fetch\(" src --include='*.ts' \
+            | grep -v '\.test\.ts' \
+            | grep -v 'src/index\.ts' \
+            | grep -v 'src/connectors/' \
+            | grep -v 'src/identity/workos-resolver\.ts' \
+            | grep -v 'src/oauth/' \
+            | grep -v '// allow-fetch' \
+            || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Bare fetch( call outside permitted modules — inject fetchImpl instead, or add // allow-fetch."
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "Bare-fetch ban invariant holds"
+
+      - name: Slack WebClient construction invariant
+        # `new WebClient(` outside the Slack boundary (src/index.ts + src/slack/*)
+        # leaks a hard SDK dep into a module that should be receiving a typed
+        # port. Bolt wires the client itself at the app boundary; downstream
+        # handlers receive it via middleware args.
+        run: |
+          VIOLATIONS=$(grep -RnE "new WebClient\(" src --include='*.ts' \
+            | grep -v '\.test\.ts' \
+            | grep -v 'src/index\.ts' \
+            | grep -v 'src/slack/' \
+            || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::new WebClient( outside src/index.ts / src/slack/* — inject the client via deps."
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "Slack WebClient construction invariant holds"
+
+      - name: Build (emit dist)
+        run: npm run build
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Helm lint chart
+        run: helm lint chart
+
+      - name: Helm template (staging values)
+        run: helm template almanac chart -f chart/values-staging.yaml > /dev/null
+
+      - name: Helm template (production values)
+        run: helm template almanac chart -f chart/values-production.yaml > /dev/null
+
+  docker:
+    name: docker build (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t slack-knowledge-bot:ci .

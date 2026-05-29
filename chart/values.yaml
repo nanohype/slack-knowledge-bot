@@ -1,0 +1,237 @@
+# Base values for almanac (all environments). Per-env deltas in values-{staging,production}.yaml.
+
+image:
+  repository: ghcr.io/nanohype/slack-knowledge-bot
+  tag: "" # pinned per-env
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 3001
+  targetPort: 3001
+
+serviceAccount:
+  create: true
+  # Free-form additional annotations to merge into the ServiceAccount. The
+  # eks.amazonaws.com/role-arn annotation is generated separately from
+  # aws.platformRoleArn so per-env role swaps don't trample on this map.
+  annotations: {}
+
+aws:
+  # ARN of the IRSA role almanac's pods assume. Comes from landing-zone's
+  # almanac-platform component (output: irsa_role_arn). Empty at the chart
+  # level — per-env values plumb in the actual ARN. Empty value omits the
+  # eks.amazonaws.com/role-arn annotation entirely (useful for local
+  # helm-template / kind smoke runs where no real IAM role exists).
+  platformRoleArn: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: 3001
+    initialDelaySeconds: 15
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /health
+      port: 3001
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    enabled: true
+    # cert-manager Issuer name (cluster-issuer typically)
+    issuer: letsencrypt-prod
+  hosts:
+    # Set per-env in values-{env}.yaml
+    - host: ""
+      paths:
+        - path: /health
+          pathType: Exact
+        - path: /oauth
+          pathType: Prefix
+
+externalSecret:
+  enabled: true
+  # ClusterSecretStore name (provisioned by eks-gitops external-secrets addon)
+  secretStore: aws-secrets-manager
+  refreshInterval: 1h
+  # Source secret in AWS Secrets Manager — composed per-env as
+  # almanac/<env>/app-secrets by the platform reconciler. The chart references
+  # this via the externalsecret template's `data` keys.
+  remoteRefSecret: "" # set per-env (almanac/<env>/app-secrets)
+  # RDS master credentials secret name (provisioned by landing-zone rag component)
+  dbCredentialsSecret: "" # set per-env (almanac/<env>/db-credentials)
+
+prometheusRule:
+  # Ships the rules to Mimir via the kube-prometheus-stack PrometheusRule CR.
+  # Set `enabled: false` if your cluster doesn't run kube-prometheus-stack.
+  enabled: true
+  selector:
+    release: kube-prometheus-stack
+
+grafanaDashboard:
+  # Uses the grafana_dashboard sidecar pattern — Grafana auto-imports any
+  # ConfigMap with `grafana_dashboard: "1"` label.
+  enabled: true
+
+# Audit consumer — long-running SQS poller. Replaces the CDK-era Lambda.
+# Drains tenantInfra.sqsAuditQueueUrl → DynamoDB (auditTable) + S3
+# (auditBucket). KEDA owns replica count off the queue depth.
+auditConsumer:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  keda:
+    enabled: true
+    # Poll the SQS queue every 30s to update the metric KEDA scales on.
+    pollingInterval: 30
+    # After this many seconds of an empty queue, KEDA scales back to
+    # minReplicas. 300s = 5min — long enough that brief bursts don't churn,
+    # short enough that idle cost is low.
+    cooldownPeriod: 300
+    # Baseline 0: the consumer pod isn't running when the queue is empty.
+    # Set to 1 if you'd rather pay for a hot pod (no cold-start when the
+    # first message lands).
+    minReplicas: 0
+    # Cap on the number of consumer pods. Each pod long-polls + processes
+    # 10 messages per batch; 5 pods handle ~50 messages every ~5s.
+    maxReplicas: 5
+    # KEDA scales up by 1 replica per `targetQueueLength` messages in the
+    # queue. 10 here means: 30 messages → 3 replicas; 100 → maxReplicas.
+    targetQueueLength: 10
+
+networkPolicy:
+  enabled: true
+  # Ingress: only from ingress-nginx (public OAuth callbacks) and same-namespace
+  # (internal probes). Slack events arrive via Socket Mode (outbound WebSocket),
+  # not inbound HTTP, so no Slack ingress rule needed.
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3001
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # HTTPS to AWS APIs (Bedrock, DynamoDB, S3, SQS, KMS, Secrets Manager),
+    # Slack (WebSocket + REST), WorkOS, Notion, Confluence, Google Drive
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16 # IMDS — must NOT be reachable from pods
+      ports:
+        - protocol: TCP
+          port: 443
+    # Postgres (RDS via landing-zone rag component) + Redis (pipeline component) —
+    # endpoint hostnames resolved via DNS; egress restricted by NetworkPolicy to
+    # the tenant's VPC CIDR. Replace 10.0.0.0/8 with the actual cluster VPC CIDR
+    # via per-env values overrides if tightening is required.
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+
+env:
+  # Non-secret configuration. Secrets come through the ExternalSecret.
+  AWS_REGION: us-west-2
+  BEDROCK_REGION: us-west-2
+  BEDROCK_LLM_MODEL_ID: anthropic.claude-sonnet-4-6
+  BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+  RATE_LIMIT_USER_PER_HOUR: "20"
+  RATE_LIMIT_WORKSPACE_PER_HOUR: "500"
+  STALE_DOC_THRESHOLD_DAYS: "90"
+  TOKEN_STORE_ENCRYPTION_CONTEXT: almanac-token-store
+  NODE_ENV: production
+  # OTel — exports to cluster-level Collector (otel-collector.observability.svc)
+  # provisioned by eks-gitops. No per-pod sidecar.
+  OTEL_SERVICE_NAME: almanac
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_SAMPLER: always_on
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_METRIC_EXPORT_INTERVAL: "60000"
+  # Resource attrs — agents.tenant/agents.platform required by PLATFORM_TENANT_CONTRACT
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=almanac,service.version=0.1.0,agents.tenant=protohype,agents.platform=almanac"
+
+# Per-tenant infrastructure references — populated by per-env values from
+# the landing-zone almanac-platform component's outputs. Empty at the chart
+# level for local dev (where the binaries may use local stubs or kind-side
+# mocks).
+tenantInfra:
+  # DynamoDB tables (3) — almanac-platform: aws_dynamodb_table.{tokens,audit,identity_cache}.name
+  dynamodbTableTokens: ""
+  dynamodbTableAudit: ""
+  dynamodbTableIdentityCache: ""
+  # SQS audit queue + DLQ — almanac-platform: aws_sqs_queue.{audit,audit_dlq}.url
+  sqsAuditQueueUrl: ""
+  sqsAuditDlqUrl: ""
+  # ElastiCache Redis endpoint — almanac-platform: aws_elasticache_replication_group.this.primary_endpoint_address
+  redisUrl: ""
+  # KMS key for token envelope encryption — almanac-platform: aws_kms_key.token_store.id
+  kmsKeyId: ""
+  # Aurora Serverless v2 (pgvector) endpoint — almanac-platform: module.aurora.cluster_endpoint
+  pgHost: ""
+  pgPort: "5432"
+  pgDatabase: almanac
+  # S3 audit-archive bucket — almanac-platform: aws_s3_bucket.audit.bucket
+  auditBucket: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

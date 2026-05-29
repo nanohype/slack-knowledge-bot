@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "almanac.fullname" . }}
+  labels:
+    {{- include "almanac.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "almanac.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "almanac.labels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the ExternalSecret-managed Secret changes.
+        # Without this the Deployment keeps the old env vars cached on the pod
+        # spec hash; ExternalSecret writes are picked up on next pod restart only.
+        checksum/external-secret: {{ printf "%s-%s" .Values.externalSecret.remoteRefSecret .Values.externalSecret.refreshInterval | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "almanac.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            # Non-secret config from values.env
+            {{- range $k, $v := .Values.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            # Per-tenant infra references — fed by per-env Helm values from
+            # the landing-zone almanac-platform component's outputs. Empty
+            # base values are a local-dev fallback.
+            - name: DYNAMODB_TABLE_TOKENS
+              value: {{ .Values.tenantInfra.dynamodbTableTokens | quote }}
+            - name: DYNAMODB_TABLE_AUDIT
+              value: {{ .Values.tenantInfra.dynamodbTableAudit | quote }}
+            - name: DYNAMODB_TABLE_IDENTITY_CACHE
+              value: {{ .Values.tenantInfra.dynamodbTableIdentityCache | quote }}
+            - name: SQS_AUDIT_QUEUE_URL
+              value: {{ .Values.tenantInfra.sqsAuditQueueUrl | quote }}
+            - name: SQS_AUDIT_DLQ_URL
+              value: {{ .Values.tenantInfra.sqsAuditDlqUrl | quote }}
+            - name: REDIS_URL
+              value: {{ .Values.tenantInfra.redisUrl | quote }}
+            - name: KMS_KEY_ID
+              value: {{ .Values.tenantInfra.kmsKeyId | quote }}
+            - name: PGHOST
+              value: {{ .Values.tenantInfra.pgHost | quote }}
+            - name: PGPORT
+              value: {{ .Values.tenantInfra.pgPort | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.tenantInfra.pgDatabase | quote }}
+            - name: APP_BASE_URL
+              value: "https://{{ (index .Values.ingress.hosts 0).host }}"
+          envFrom:
+            # Secrets from the ExternalSecret-managed k8s Secret. Names match
+            # the AWS Secrets Manager JSON keys (SLACK_BOT_TOKEN, etc.) plus
+            # the RDS-credentials sub-secret keys (PGUSER, PGPASSWORD).
+            - secretRef:
+                name: {{ include "almanac.fullname" . }}-secrets
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

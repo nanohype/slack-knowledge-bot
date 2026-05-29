@@ -1,0 +1,105 @@
+version: "3"
+
+vars:
+  IMAGE: '{{.IMAGE | default "slack-knowledge-bot:dev"}}'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # === Composite ===
+
+  ci:
+    desc: "Full local CI: install, oauth package, check (typecheck+lint+format+test), audit, build, helm lint/template, docker build"
+    cmds:
+      - task: install
+      - task: oauth
+      - task: check
+      - task: audit
+      - task: build
+      - task: helm:lint
+      - task: helm:template
+      - task: docker:build
+
+  # === Install ===
+
+  install:
+    desc: Install app + oauth package deps
+    cmds:
+      # `npm install` not `npm ci`: the macOS-generated lockfile omits the
+      # Linux platform-specific optional deps (vitest/rolldown); npm install
+      # resolves them on whatever host runs this, pinned by the lockfile.
+      - npm install --prefer-offline --no-audit --no-fund
+      - npm install --prefer-offline --no-audit --no-fund --prefix packages/oauth
+
+  # === TypeScript ===
+
+  check:
+    desc: "App gate: typecheck + lint + format:check + test"
+    cmds:
+      - npm run check
+
+  oauth:
+    desc: "almanac-oauth package: lint + typecheck + test + build"
+    dir: packages/oauth
+    cmds:
+      - npm run lint
+      - npm run typecheck
+      - npm test
+      - npm run build
+
+  build:
+    desc: Compile the app (tsc) and the oauth package
+    cmds:
+      - npm run build:oauth
+      - npm run build
+
+  test:
+    desc: Run the app test suite
+    cmds:
+      - npm test
+
+  audit:
+    desc: Audit production deps (high severity, omit dev)
+    cmds:
+      - npm run audit:prod
+
+  # === Helm ===
+
+  helm:lint:
+    desc: Lint the chart
+    cmds:
+      - npm run chart:lint
+
+  helm:template:
+    desc: Render the chart against staging + production values
+    cmds:
+      - npm run chart:template:staging > /dev/null
+      - npm run chart:template:production > /dev/null
+
+  # === Docker ===
+
+  docker:build:
+    desc: "Build the container image (no push)"
+    cmds:
+      - docker build -t {{.IMAGE}} .
+
+  # === Security ===
+
+  security:scan:
+    desc: "Run security scanners (gitleaks + trivy config) if available locally"
+    cmds:
+      - |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --config .gitleaks.toml --redact --no-banner .
+        else
+          echo "gitleaks not installed — install via 'brew install gitleaks' to run locally"
+        fi
+      - |
+        if command -v trivy >/dev/null 2>&1; then
+          trivy config . --severity HIGH,CRITICAL --skip-dirs chart --exit-code 1
+        else
+          echo "trivy not installed — install via 'brew install trivy' to run locally"
+        fi

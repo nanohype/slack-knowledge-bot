@@ -1,0 +1,8 @@
+apiVersion: v2
+name: almanac
+description: Internal Slack knowledge bot — per-user ACL-enforced RAG over Notion/Confluence/Drive.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: protohype
