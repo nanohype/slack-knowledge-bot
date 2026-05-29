@@ -48,6 +48,12 @@ jobs:
           # them rather than surfacing real findings.
           scan-ref: Dockerfile
           severity: HIGH,CRITICAL
+          # The gate is HIGH/CRITICAL only. Without this, trivy-action builds
+          # the SARIF with all severities and exits non-zero on any of them —
+          # so MEDIUM/LOW lint (e.g. dockerfile best-practice notes) would fail
+          # the build. This keeps the gate to HIGH/CRITICAL while still
+          # surfacing lower-severity findings in the SARIF for code-scanning.
+          limit-severities-for-sarif: true
           exit-code: "1"
           format: sarif
           output: trivy-config.sarif
@@ -72,6 +78,9 @@ jobs:
           # keeps the gate to actionable (patch-available) CVEs.
           scanners: vuln
           severity: HIGH,CRITICAL
+          # Gate on HIGH/CRITICAL only (see trivy-config note); lower-severity
+          # CVEs still upload to code-scanning as warnings.
+          limit-severities-for-sarif: true
           exit-code: "1"
           ignore-unfixed: true
           format: sarif

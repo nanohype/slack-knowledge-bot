@@ -3,12 +3,14 @@ WORKDIR /app
 
 # Build the almanac-oauth workspace first — almanac depends on it via
 # `file:./packages/oauth` and needs its dist/ at install time.
-COPY packages/oauth/package.json packages/oauth/package-lock.json packages/oauth/tsconfig.json ./packages/oauth/
-RUN cd packages/oauth && npm ci
-COPY packages/oauth/src ./packages/oauth/src
-RUN cd packages/oauth && npm run build
+WORKDIR /app/packages/oauth
+COPY packages/oauth/package.json packages/oauth/package-lock.json packages/oauth/tsconfig.json ./
+RUN npm ci
+COPY packages/oauth/src ./src
+RUN npm run build
 
 # Install and build almanac against the just-built local package.
+WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsconfig.build.json ./
