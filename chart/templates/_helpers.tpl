@@ -20,8 +20,8 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | 
 {{ include "almanac.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-agents.stxkxs.io/tenant: protohype
-agents.stxkxs.io/platform: almanac
+agents.nanohype.dev/tenant: protohype
+agents.nanohype.dev/platform: almanac
 {{- end -}}
 
 {{- define "almanac.selectorLabels" -}}
