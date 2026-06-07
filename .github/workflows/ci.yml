@@ -34,23 +34,23 @@ jobs:
         # to `npm ci` once a cross-platform lockfile is committed.
         run: npm install --prefer-offline --no-audit --no-fund
 
-      - name: Install (almanac-oauth package)
+      - name: Install (slack-knowledge-bot-oauth package)
         run: npm install --prefer-offline --no-audit --no-fund
         working-directory: packages/oauth
 
-      - name: Lint (almanac-oauth)
+      - name: Lint (slack-knowledge-bot-oauth)
         run: npm run lint
         working-directory: packages/oauth
 
-      - name: Typecheck (almanac-oauth)
+      - name: Typecheck (slack-knowledge-bot-oauth)
         run: npm run typecheck
         working-directory: packages/oauth
 
-      - name: Test (almanac-oauth)
+      - name: Test (slack-knowledge-bot-oauth)
         run: npm test
         working-directory: packages/oauth
 
-      - name: Build almanac-oauth
+      - name: Build slack-knowledge-bot-oauth
         run: npm run build
         working-directory: packages/oauth
 
@@ -68,7 +68,7 @@ jobs:
         # internal modules). AWS SDK clients use aws-sdk-client-mock, which
         # attaches to the client instance, not `vi.mock`.
         run: |
-          VIOLATIONS=$(grep -RnE "vi\.mock\(['\"](@aws-sdk/|@slack/bolt|@opentelemetry/|ioredis|pg|almanac-oauth|node:crypto|node:http)" src --include='*.test.ts' || true)
+          VIOLATIONS=$(grep -RnE "vi\.mock\(['\"](@aws-sdk/|@slack/bolt|@opentelemetry/|ioredis|pg|slack-knowledge-bot-oauth|node:crypto|node:http)" src --include='*.test.ts' || true)
           if [ -n "$VIOLATIONS" ]; then
             echo "::error::SDK-mock ban: vi.mock of an SDK package is forbidden — inject a port fake instead."
             echo "$VIOLATIONS"
@@ -129,10 +129,10 @@ jobs:
         run: helm lint chart
 
       - name: Helm template (staging values)
-        run: helm template almanac chart -f chart/values-staging.yaml > /dev/null
+        run: helm template slack-knowledge-bot chart -f chart/values-staging.yaml > /dev/null
 
       - name: Helm template (production values)
-        run: helm template almanac chart -f chart/values-production.yaml > /dev/null
+        run: helm template slack-knowledge-bot chart -f chart/values-production.yaml > /dev/null
 
   docker:
     name: docker build (no push)

@@ -1,6 +1,6 @@
 /**
  * Thin bridge between node:http and the Web-standard Request/Response
- * that almanac-oauth's handlers expect.
+ * that slack-knowledge-bot-oauth's handlers expect.
  *
  * Node 22 has global Request/Response, so construction is native; we just
  * marshal the headers and the body.

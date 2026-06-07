@@ -1,6 +1,6 @@
-# almanac-oauth
+# slack-knowledge-bot-oauth
 
-Almanac per-user OAuth delegation — scaffolded from nanohype module-oauth-delegation
+SlackKnowledgeBot per-user OAuth delegation — scaffolded from nanohype module-oauth-delegation
 
 Outbound OAuth 2.0 delegation with Authorization Code + PKCE, HMAC-signed state cookies, pluggable per-user token storage, and automatic refresh-before-expiry. Ships reference adapters for Notion, Google, Atlassian, Slack, and HubSpot.
 
@@ -20,7 +20,7 @@ import {
   notionProvider,
   googleProvider,
   InMemoryTokenStorage,
-} from "almanac-oauth";
+} from "slack-knowledge-bot-oauth";
 
 const router = createOAuthRouter({
   providers: { notion: notionProvider, google: googleProvider },

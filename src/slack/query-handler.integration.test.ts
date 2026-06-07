@@ -13,7 +13,7 @@ import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { SayFn, AllMiddlewareArgs } from "@slack/bolt";
-import type { OAuthRouter, TokenStorage } from "almanac-oauth";
+import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
 import { createRateLimiter } from "../ratelimit/redis-limiter.js";
 import { createWorkOSResolver } from "../identity/workos-resolver.js";
 import { createAclGuard } from "../connectors/acl-guard.js";
@@ -184,7 +184,7 @@ function buildDeps(overrides: {
     signOAuthStartUrl: (userId, provider) => `sig-${userId}-${provider}`,
     sourceToProvider: SOURCE_TO_PROVIDER,
     workspaceId: "W",
-    appBaseUrl: "https://almanac.test",
+    appBaseUrl: "https://slack-knowledge-bot.test",
     userPerHour: 20,
     workspacePerHour: 500,
     now: () => NOW,

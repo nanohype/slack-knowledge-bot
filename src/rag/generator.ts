@@ -19,7 +19,7 @@ const CompletionResponseSchema = z.object({
   content: z.array(z.object({ text: z.string() })).min(1, "Bedrock returned empty content array"),
 });
 
-const SYSTEM_PROMPT = `You are Almanac, an internal knowledge assistant. Answer employee questions using ONLY the provided source documents.
+const SYSTEM_PROMPT = `You are SlackKnowledgeBot, an internal knowledge assistant. Answer employee questions using ONLY the provided source documents.
 
 Rules:
 1. Answer based solely on the [CONTEXT] documents. Do not use outside knowledge.

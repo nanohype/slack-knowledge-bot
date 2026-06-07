@@ -1,4 +1,4 @@
-# Almanac ApplicationSet entry — register into nanohype/eks-gitops at
+# SlackKnowledgeBot ApplicationSet entry — register into nanohype/eks-gitops at
 # applicationsets/apps-tenants.yaml (create if it doesn't exist yet).
 # Matrix generator: clusters × this list, so the same entry deploys to every
 # cluster labeled with the right environment.
@@ -6,7 +6,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: tenant-almanac
+  name: tenant-slack-knowledge-bot
   namespace: argocd
 spec:
   generators:
@@ -18,12 +18,12 @@ spec:
                   argocd.argoproj.io/secret-type: cluster
           - list:
               elements:
-                - name: almanac
+                - name: slack-knowledge-bot
                   path: chart
                   syncWave: "100"
   template:
     metadata:
-      name: 'almanac-{{ index .metadata.labels "environment" }}'
+      name: 'slack-knowledge-bot-{{ index .metadata.labels "environment" }}'
       annotations:
         argocd.argoproj.io/sync-wave: "{{`{{syncWave}}`}}"
     spec:

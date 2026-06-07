@@ -2,7 +2,7 @@
 
 You're an AI client (or the author of one) about to run this service locally, add a knowledge source, wire a new OAuth provider, or ship it as a Platform tenant. This file gets you running in five minutes. For the wider picture — how this repo fits into the nanohype stack — read the [Platform Reference](../nanohype/docs/platform-reference.md).
 
-> Internal service handle: **almanac**. The GitHub repo and product name are `slack-knowledge-bot`, but the npm package, OTel `service.name` / `agents.platform`, the `/almanac` slash command, and the `almanac/<env>/*` secret prefixes stay `almanac` — they're coupled to the landing-zone `almanac-platform` substrate component.
+> Internal service handle: **slack-knowledge-bot**. The GitHub repo and product name are `slack-knowledge-bot`, but the npm package, OTel `service.name` / `agents.platform`, the `/slack-knowledge-bot` slash command, and the `slack-knowledge-bot/<env>/*` secret prefixes stay `slack-knowledge-bot` — they're coupled to the landing-zone `slack-knowledge-bot-platform` substrate component.
 
 ## What this repo gives you
 
@@ -18,7 +18,7 @@ cp .env.example .env       # fill in the required keys (see CLAUDE.md > Configur
 npm run dev                # tsx watch src/index.ts — serves :3001 (/health + /oauth/*)
 ```
 
-In Slack: `@almanac what's our vacation policy?`
+In Slack: `@slack-knowledge-bot what's our vacation policy?`
 
 ```bash
 npm run check              # typecheck + lint + format:check + test (CI parity, one shot)
@@ -36,10 +36,10 @@ Two CRs in different groups — a `BudgetPolicy` (`governance.nanohype.dev/v1alp
 apiVersion: governance.nanohype.dev/v1alpha1
 kind: BudgetPolicy
 metadata:
-  name: almanac
+  name: slack-knowledge-bot
   namespace: tenants-protohype
 spec:
-  platformRef: { name: almanac }
+  platformRef: { name: slack-knowledge-bot }
   monthlyUsd: "5000" # kill-switch fires at 120% (USD 6000)
   alertThresholdsPercent: [50, 80, 100]
   killSwitchEnabled: true
@@ -47,13 +47,13 @@ spec:
 apiVersion: platform.nanohype.dev/v1alpha1
 kind: Platform
 metadata:
-  name: almanac
+  name: slack-knowledge-bot
   namespace: tenants-protohype
 spec:
-  displayName: almanac
+  displayName: slack-knowledge-bot
   persona: support
   tenant: protohype
-  budget: { name: almanac }
+  budget: { name: slack-knowledge-bot }
   identity:
     allowedModelFamilies: [anthropic, amazon] # Claude (LLM) + Titan (embeddings)
     extraPolicyArns: [] # app pods assume the landing-zone role directly
@@ -61,7 +61,7 @@ spec:
   isolation: namespace
 ```
 
-The operator reconciles the namespace `tenants-protohype`, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, and a per-Platform IRSA role trusting the `tenant-runtime` SA. **almanac's own app pods don't use that operator role** — they assume the landing-zone `almanac-platform` IRSA role directly via the chart's `aws.platformRoleArn` Helm value. `extraPolicyArns` stays empty for that reason.
+The operator reconciles the namespace `tenants-protohype`, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, and a per-Platform IRSA role trusting the `tenant-runtime` SA. **slack-knowledge-bot's own app pods don't use that operator role** — they assume the landing-zone `slack-knowledge-bot-platform` IRSA role directly via the chart's `aws.platformRoleArn` Helm value. `extraPolicyArns` stays empty for that reason.
 
 ### The Helm chart (`chart/`)
 
@@ -73,13 +73,13 @@ The application Deployment plus everything that supports it. Templates under `ch
 | `service.yaml`                                                        | ClusterIP :3001                                                                                                      |
 | `ingress.yaml`                                                        | ingress-nginx + cert-manager TLS for `/health` and `/oauth/:provider/{start,callback}`                               |
 | `serviceaccount.yaml`                                                 | Shared SA for the main pod + audit-consumer; `eks.amazonaws.com/role-arn` rendered from `aws.platformRoleArn`        |
-| `externalsecret.yaml`                                                 | ESO syncs `almanac/<env>/app-secrets` + `almanac/<env>/db-credentials` from Secrets Manager                          |
+| `externalsecret.yaml`                                                 | ESO syncs `slack-knowledge-bot/<env>/app-secrets` + `slack-knowledge-bot/<env>/db-credentials` from Secrets Manager  |
 | `networkpolicy.yaml`                                                  | Default-deny + egress allow-list (AWS APIs, Slack/WorkOS/Notion/Confluence/Drive HTTPS, RDS + Redis on the VPC CIDR) |
 | `audit-consumer-deployment.yaml` + `audit-consumer-scaledobject.yaml` | The SQS-drain Deployment (`dist/bin/audit-consumer.js`), KEDA-scaled 0..5 on audit queue depth                       |
 | `prometheusrule.yaml`                                                 | Four alerts — QueryP95, LLMError, AuditTotalLoss, AuditDlqDepth                                                      |
-| `grafana-dashboard.yaml`                                              | ConfigMap loading `chart/dashboards/almanac.json`                                                                    |
+| `grafana-dashboard.yaml`                                              | ConfigMap loading `chart/dashboards/slack-knowledge-bot.json`                                                        |
 
-`values.yaml` is the base; `values-staging.yaml` / `values-production.yaml` carry the per-env deltas (image tag, `aws.platformRoleArn`, replica count). The image is `ghcr.io/nanohype/slack-knowledge-bot`. OTel attrs `agents.tenant=protohype` + `agents.platform=almanac` are set in every values file (required by the platform-tenant contract).
+`values.yaml` is the base; `values-staging.yaml` / `values-production.yaml` carry the per-env deltas (image tag, `aws.platformRoleArn`, replica count). The image is `ghcr.io/nanohype/slack-knowledge-bot`. OTel attrs `agents.tenant=protohype` + `agents.platform=slack-knowledge-bot` are set in every values file (required by the platform-tenant contract).
 
 ### Required tenant files
 
@@ -101,7 +101,7 @@ A "connector" is a knowledge source the bot can verify per-user access against (
 
 ## Add an OAuth provider
 
-OAuth providers live in the in-repo `packages/oauth` package (the `almanac-oauth` module, scaffolded from nanohype's `module-oauth-delegation` template) under `packages/oauth/src/oauth/providers/`. Built-ins: Notion, Google, Atlassian, Slack, HubSpot. To add one:
+OAuth providers live in the in-repo `packages/oauth` package (the `slack-knowledge-bot-oauth` module, scaffolded from nanohype's `module-oauth-delegation` template) under `packages/oauth/src/oauth/providers/`. Built-ins: Notion, Google, Atlassian, Slack, HubSpot. To add one:
 
 1. **Write the adapter** — add `packages/oauth/src/oauth/providers/<name>.ts` modeled on `notion.ts`. Export an `OAuthProvider` object (`authUrl`, `tokenUrl`, `defaultScopes`, `usePkce`, `tokenAuthStyle`, `parseTokenResponse`) and call `registerProvider("<name>", () => <name>Provider)` at module load.
 2. **Wire the barrel** — add a side-effect `import "./<name>.js"` and a named re-export to `packages/oauth/src/oauth/providers/index.ts` so consumers can pass the adapter directly.
@@ -130,4 +130,4 @@ OAuth providers live in the in-repo `packages/oauth` package (the `almanac-oauth
 - [`docs/`](docs/) — PRD, RAG architecture, QA playbook, threat model, compliance checklist, runbook, integrations, secrets, onboarding, test plan
 - [Platform Reference](../nanohype/docs/platform-reference.md) — the stack-wide view
 - [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) — the operator that reconciles the Platform CR
-- [`landing-zone`](https://github.com/nanohype/landing-zone) — the `almanac-platform` substrate the chart's IRSA role and data stores live in
+- [`landing-zone`](https://github.com/nanohype/landing-zone) — the `slack-knowledge-bot-platform` substrate the chart's IRSA role and data stores live in

@@ -48,8 +48,8 @@ function makeDeps(overrides: Partial<AuditConsumerDeps> = {}): AuditConsumerDeps
     ddb: new DynamoDBClient({}),
     s3: new S3Client({}),
     queueUrl: "https://sqs/audit",
-    auditTable: "almanac-audit",
-    auditBucket: "almanac-audit-archive",
+    auditTable: "slack-knowledge-bot-audit",
+    auditBucket: "slack-knowledge-bot-audit-archive",
     shouldStop: stopAfter(1),
     ...overrides,
   };
@@ -76,7 +76,7 @@ describe("runAuditConsumer — happy path", () => {
     const ddbCalls = ddbMock.commandCalls(PutItemCommand);
     expect(ddbCalls).toHaveLength(1);
     const ddbInput = ddbCalls[0].args[0].input;
-    expect(ddbInput.TableName).toBe("almanac-audit");
+    expect(ddbInput.TableName).toBe("slack-knowledge-bot-audit");
     expect(ddbInput.Item?.userId).toEqual({ S: "okta-1" });
     expect(ddbInput.Item?.timestamp).toEqual({ S: "2026-04-15T00:00:00.000Z" });
     expect(ddbInput.Item?.eventData?.S).toBe(validBody());
@@ -86,7 +86,7 @@ describe("runAuditConsumer — happy path", () => {
     const s3Calls = s3Mock.commandCalls(PutObjectCommand);
     expect(s3Calls).toHaveLength(1);
     const s3Input = s3Calls[0].args[0].input;
-    expect(s3Input.Bucket).toBe("almanac-audit-archive");
+    expect(s3Input.Bucket).toBe("slack-knowledge-bot-audit-archive");
     // key = audit/<userId>/<datePart>/<queryHash>.json
     expect(s3Input.Key).toBe("audit/okta-1/2026-04-15/deadbeef.json");
     expect(s3Input.Body).toBe(validBody());

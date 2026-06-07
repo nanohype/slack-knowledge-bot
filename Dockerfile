@@ -1,7 +1,7 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
 
-# Build the almanac-oauth workspace first — almanac depends on it via
+# Build the slack-knowledge-bot-oauth workspace first — slack-knowledge-bot depends on it via
 # `file:./packages/oauth` and needs its dist/ at install time.
 WORKDIR /app/packages/oauth
 COPY packages/oauth/package.json packages/oauth/package-lock.json packages/oauth/tsconfig.json ./
@@ -9,7 +9,7 @@ RUN npm ci
 COPY packages/oauth/src ./src
 RUN npm run build
 
-# Install and build almanac against the just-built local package.
+# Install and build slack-knowledge-bot against the just-built local package.
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -21,10 +21,10 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN addgroup -g 1001 -S almanac && adduser -u 1001 -S almanac -G almanac
+RUN addgroup -g 1001 -S slack-knowledge-bot && adduser -u 1001 -S slack-knowledge-bot -G slack-knowledge-bot
 
 # Runtime copy of the local package (package.json + dist) — npm ci in the
-# runner resolves `almanac-oauth` against this path.
+# runner resolves `slack-knowledge-bot-oauth` against this path.
 COPY --from=builder /app/packages/oauth/package.json ./packages/oauth/
 COPY --from=builder /app/packages/oauth/dist ./packages/oauth/dist
 
@@ -33,7 +33,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 
-USER almanac
+USER slack-knowledge-bot
 
 EXPOSE 3001
 

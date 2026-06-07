@@ -1,7 +1,7 @@
 {
-  "uid": "almanac",
-  "title": "Almanac",
-  "tags": ["protohype", "almanac"],
+  "uid": "slack-knowledge-bot",
+  "title": "SlackKnowledgeBot",
+  "tags": ["protohype", "slack-knowledge-bot"],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",
@@ -27,7 +27,7 @@
           "type": "prometheus",
           "uid": "$datasource"
         },
-        "query": "label_values(almanac_query_latency_ms_bucket, deployment_environment)",
+        "query": "label_values(slack_knowledge_bot_query_latency_ms_bucket, deployment_environment)",
         "current": {
           "text": "production",
           "value": "production"
@@ -43,17 +43,17 @@
       "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(almanac_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(slack_knowledge_bot_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(almanac_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(slack_knowledge_bot_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(almanac_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(slack_knowledge_bot_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -67,7 +67,7 @@
       "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(almanac_query_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum by (outcome) (rate(slack_knowledge_bot_query_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }
@@ -81,7 +81,7 @@
       "gridPos": {"x": 0, "y": 8, "w": 8, "h": 8},
       "targets": [
         {
-          "expr": "sum by (model) (rate(almanac_bedrock_calls_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum by (model) (rate(slack_knowledge_bot_bedrock_calls_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -95,7 +95,7 @@
       "gridPos": {"x": 8, "y": 8, "w": 8, "h": 8},
       "targets": [
         {
-          "expr": "sum(rate(almanac_llm_error_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum(rate(slack_knowledge_bot_llm_error_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "errors/s",
           "refId": "A"
         }
@@ -109,7 +109,7 @@
       "gridPos": {"x": 16, "y": 8, "w": 8, "h": 8},
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(almanac_identity_lookup_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum by (outcome) (rate(slack_knowledge_bot_identity_lookup_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }
@@ -123,7 +123,7 @@
       "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "sum(rate(almanac_audit_total_loss_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum(rate(slack_knowledge_bot_audit_total_loss_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "total loss / s",
           "refId": "A"
         }
@@ -137,7 +137,7 @@
       "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
       "targets": [
         {
-          "expr": "max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~\"almanac-audit-dlq-.*\"})",
+          "expr": "max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~\"slack-knowledge-bot-audit-dlq-.*\"})",
           "legendFormat": "{{queue_name}}",
           "refId": "A"
         }
@@ -151,7 +151,7 @@
       "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(almanac_ratelimit_total{deployment_environment=\"$environment\"}[5m]))",
+          "expr": "sum by (outcome) (rate(slack_knowledge_bot_ratelimit_total{deployment_environment=\"$environment\"}[5m]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }

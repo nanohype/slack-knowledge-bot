@@ -2,7 +2,7 @@
 # Audit consumer Deployment — runs dist/bin/audit-consumer.js, which
 # long-polls the audit SQS queue and writes to DynamoDB + S3. Replaces
 # the CDK-era Lambda whose inline JS lived in
-# infra/lib/almanac-stack.ts (deleted in PR #26).
+# infra/lib/slack-knowledge-bot-stack.ts (deleted in PR #26).
 #
 # Scaled by KEDA against the audit queue depth — see ScaledObject below.
 # The Deployment ships with replicas: 0 baseline; KEDA scales up when the
@@ -12,10 +12,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "almanac.fullname" . }}-audit-consumer
+  name: {{ include "tenant-chart-base.fullname" . }}-audit-consumer
   labels:
-    {{- include "almanac.labels" . | nindent 4 }}
-    almanac.io/service: audit-consumer
+    {{- include "tenant-chart-base.labels" . | nindent 4 }}
+    slack-knowledge-bot.io/service: audit-consumer
 spec:
   # KEDA owns replicas via the ScaledObject below. The initial state is 0
   # (no work in the queue at install time); KEDA scales up when messages
@@ -28,16 +28,16 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "almanac.name" . }}
+      app.kubernetes.io/name: {{ include "tenant-chart-base.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
-      almanac.io/service: audit-consumer
+      slack-knowledge-bot.io/service: audit-consumer
   template:
     metadata:
       labels:
-        {{- include "almanac.labels" . | nindent 8 }}
-        almanac.io/service: audit-consumer
+        {{- include "tenant-chart-base.labels" . | nindent 8 }}
+        slack-knowledge-bot.io/service: audit-consumer
     spec:
-      serviceAccountName: {{ include "almanac.serviceAccountName" . }}
+      serviceAccountName: {{ include "tenant-chart-base.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       # 45s — gives audit-consumer.ts's drain timer (30s) headroom plus
@@ -64,7 +64,7 @@ spec:
             - name: AUDIT_BUCKET
               value: {{ .Values.tenantInfra.auditBucket | quote }}
             - name: OTEL_SERVICE_NAME
-              value: almanac-audit-consumer
+              value: slack-knowledge-bot-audit-consumer
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
             - name: OTEL_EXPORTER_OTLP_PROTOCOL

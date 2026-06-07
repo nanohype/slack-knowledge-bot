@@ -1,8 +1,8 @@
 /**
- * Almanac OAuth delegation bootstrap.
+ * SlackKnowledgeBot OAuth delegation bootstrap.
  *
- * Wires the almanac-oauth package (scaffolded from nanohype's
- * module-oauth-delegation template) with Almanac's config, storage, and
+ * Wires the slack-knowledge-bot-oauth package (scaffolded from nanohype's
+ * module-oauth-delegation template) with SlackKnowledgeBot's config, storage, and
  * caller-identity semantics. The revocation emitter is port-injected
  * so tests can supply a fake AuditLogger and assert on outgoing events.
  */
@@ -17,7 +17,7 @@ import {
   type ResolveUserId,
   type RevocationEmitter,
   type TokenStorage,
-} from "almanac-oauth";
+} from "slack-knowledge-bot-oauth";
 import type { AuditLogger } from "../audit/audit-logger.js";
 import { config } from "../config/index.js";
 import { trace } from "@opentelemetry/api";
@@ -28,7 +28,7 @@ export const SUPPORTED_PROVIDERS = ["notion", "atlassian", "google"] as const;
 export type ProviderName = (typeof SUPPORTED_PROVIDERS)[number];
 
 /**
- * Map Almanac's internal source names (as used on RetrievalHit.source) to
+ * Map SlackKnowledgeBot's internal source names (as used on RetrievalHit.source) to
  * the OAuth provider name. Atlassian covers Confluence; Google covers Drive.
  */
 export const SOURCE_TO_PROVIDER: Record<"notion" | "confluence" | "drive", ProviderName> = {
@@ -37,14 +37,14 @@ export const SOURCE_TO_PROVIDER: Record<"notion" | "confluence" | "drive", Provi
   drive: "google",
 };
 
-export interface AlmanacOAuthConfig {
+export interface SlackKnowledgeBotOAuthConfig {
   auditLogger: AuditLogger;
   storage?: TokenStorage;
   stateSigningSecret?: string;
   appBaseUrl?: string;
 }
 
-export interface AlmanacOAuth {
+export interface SlackKnowledgeBotOAuth {
   router: OAuthRouter;
   storage: TokenStorage;
 }
@@ -55,7 +55,7 @@ function extractProvider(url: URL): string | null {
 }
 
 /**
- * Almanac's caller-identity resolver.
+ * SlackKnowledgeBot's caller-identity resolver.
  *
  * - `/start` carries `?t=<signed-url-token>`. We verify the HMAC and
  *   return the embedded userId.
@@ -101,10 +101,12 @@ function buildStorage(): TokenStorage {
 }
 
 /**
- * Build Almanac's OAuth layer. Bootstrap code calls this once and hands
+ * Build SlackKnowledgeBot's OAuth layer. Bootstrap code calls this once and hands
  * the returned `router` + `storage` to the query handler and HTTP bridge.
  */
-export function createAlmanacOAuth(deps: AlmanacOAuthConfig): AlmanacOAuth {
+export function createSlackKnowledgeBotOAuth(
+  deps: SlackKnowledgeBotOAuthConfig,
+): SlackKnowledgeBotOAuth {
   const storage = deps.storage ?? buildStorage();
 
   const revocationEmitter: RevocationEmitter = {

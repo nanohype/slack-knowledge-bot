@@ -18,7 +18,7 @@
  *
  * Tokens are fetched per-user per-source via the `getAccessToken`
  * callback. The callback's contract is "return a valid access token or
- * null"; almanac-oauth's getValidToken() satisfies it by handling
+ * null"; slack-knowledge-bot-oauth's getValidToken() satisfies it by handling
  * refresh-before-expiry transparently.
  *
  * The HTTP client is injected so tests pass `vi.fn<typeof fetch>()`

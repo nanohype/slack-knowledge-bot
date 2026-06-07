@@ -5,7 +5,7 @@
 ![Node](https://img.shields.io/badge/Node-%3E%3D24-339933?logo=node.js)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-Tenant-326CE5?logo=kubernetes)
 
-Internal Slack knowledge bot — answers employee questions over Notion, Confluence, and Google Drive with per-user, ACL-filtered retrieval. Every retrieval is bounded to what the asking user can already read in the source system; every answer cites its sources. The internal service handle is `almanac` (npm package, OTel `service.name`, the `/almanac` slash command, and the `almanac/<env>/*` secret prefixes).
+Internal Slack knowledge bot — answers employee questions over Notion, Confluence, and Google Drive with per-user, ACL-filtered retrieval. Every retrieval is bounded to what the asking user can already read in the source system; every answer cites its sources. The internal service handle is `slack-knowledge-bot` (npm package, OTel `service.name`, the `/slack-knowledge-bot` slash command, and the `slack-knowledge-bot/<env>/*` secret prefixes).
 
 **AI clients / agents start here:** [`AGENTS.md`](AGENTS.md). For the stack-wide view, see the [Platform Reference](https://github.com/nanohype/nanohype/blob/main/docs/platform-reference.md).
 
@@ -23,7 +23,7 @@ cp .env.example .env   # fill in values — see CLAUDE.md > Configuration
 npm run dev            # tsx watch on src/index.ts
 ```
 
-In Slack: `@almanac what's our vacation policy?`
+In Slack: `@slack-knowledge-bot what's our vacation policy?`
 
 Run the full local gate before pushing:
 
@@ -39,13 +39,13 @@ Ships as a [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform
 - **`platform.yaml`** — the `Platform` CR + `BudgetPolicy` declaring the tenant boundary (`tenant: protohype`, namespace `tenants-protohype`). The operator reconciles the Namespace, ResourceQuota, IRSA role, KMS grants, S3 bucket policy, and ArgoCD AppProject.
 - **`gitops/applicationset-entry.yaml`** — the ApplicationSet entry registered into [`nanohype/eks-gitops`](https://github.com/nanohype/eks-gitops) for ArgoCD reconciliation.
 
-The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `almanac-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). Its `irsa_role_arn` output feeds the chart's `aws.platformRoleArn`. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
+The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). Its `irsa_role_arn` output feeds the chart's `aws.platformRoleArn`. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
 
 ## Boundaries
 
 This repo owns the application — the Slack pipeline, the RAG logic, the per-user ACL enforcement, and the tenant trio that deploys it. It does **not** own:
 
-- AWS substrate (DynamoDB, SQS, S3, Aurora/pgvector, Redis, KMS, Secrets Manager) → the `almanac-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone)
+- AWS substrate (DynamoDB, SQS, S3, Aurora/pgvector, Redis, KMS, Secrets Manager) → the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone)
 - Cluster addons (ingress-nginx, cert-manager, external-secrets, KEDA, the OTel collector + log forwarder, kube-prometheus-stack) → [`eks-gitops`](https://github.com/nanohype/eks-gitops)
 
 ## License

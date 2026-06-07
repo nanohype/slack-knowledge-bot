@@ -1,4 +1,4 @@
-# gitleaks configuration for slack-knowledge-bot (internal service handle: almanac).
+# gitleaks configuration for slack-knowledge-bot (internal service handle: slack-knowledge-bot).
 #
 # Strategy: extend the default ruleset, then allowlist only the placeholder
 # strings we intentionally commit. Suppression is path- and stopword-scoped,

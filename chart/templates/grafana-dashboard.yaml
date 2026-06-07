@@ -1,12 +1,1 @@
-{{- if .Values.grafanaDashboard.enabled -}}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "almanac.fullname" . }}-dashboard
-  labels:
-    {{- include "almanac.labels" . | nindent 4 }}
-    grafana_dashboard: "1"
-data:
-  almanac.json: |-
-    {{- .Files.Get "dashboards/almanac.json" | nindent 4 }}
-{{- end }}
+{{ include "tenant-chart-base.grafanaDashboard" . }}

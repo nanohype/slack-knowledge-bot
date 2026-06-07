@@ -19,7 +19,7 @@
  */
 import { metrics as otelMetrics, type Counter, type Histogram } from "@opentelemetry/api";
 
-const METER_NAME = "almanac";
+const METER_NAME = "slack-knowledge-bot";
 
 const counters = new Map<string, Counter>();
 const histograms = new Map<string, Histogram>();

@@ -12,7 +12,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **Port** | `IdentityResolver` (`src/identity/types.ts`) |
 | **Factory** | `createWorkOSResolver({fetchImpl, ddbClient, workosApiKey, workosDirectoryId, …})` (`src/identity/workos-resolver.ts`) |
 | **API surface** | `GET https://api.workos.com/directory_users?directory={id}&limit=100` (paginated) with `Authorization: Bearer {apiKey}`. Client-filters the response by email — the endpoint doesn't support an `email=` query param (returns 422). |
-| **Env vars** | `WORKOS_API_KEY`, `WORKOS_DIRECTORY_ID` — both in Secrets Manager `almanac/{env}/app-secrets` |
+| **Env vars** | `WORKOS_API_KEY`, `WORKOS_DIRECTORY_ID` — both in Secrets Manager `slack-knowledge-bot/{env}/app-secrets` |
 | **Setup** | [dashboard.workos.com](https://dashboard.workos.com) → sign up (gmail OK) → **Directory Sync** → connect your workforce directory (Google Workspace, Azure AD, Okta, manual CSV, …) → copy the `directory_01…` ID → **API Keys** → create a Production key (`sk_…`) |
 | **Verify** | `npm test -- --grep workos-resolver` (Bearer auth shape, directory filter, primary-email selection, cache hit/miss, null fallover, custom baseUrl, multi-page `after` cursor pagination) |
 | **Swap to** | Okta (`createOktaResolver`), Azure Entra (`createEntraResolver`), Google Admin SDK, or a local JSON directory file. Implement `IdentityResolver` and wire in `src/index.ts`. |
@@ -23,11 +23,11 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 
 | | |
 |---|---|
-| **What it does** | Receives user questions (`@almanac …`, DMs) and slash commands (`/almanac disconnect`). Sends Block Kit replies (answers, citations, OAuth prompts, error messages). Fetches user profile emails via `users.info`. |
+| **What it does** | Receives user questions (`@slack-knowledge-bot …`, DMs) and slash commands (`/slack-knowledge-bot disconnect`). Sends Block Kit replies (answers, citations, OAuth prompts, error messages). Fetches user profile emails via `users.info`. |
 | **Port** | Slack Bolt `App` — the query handler and disconnect command register via `registerWith(app)`. Not abstracted behind a port because Slack is the product surface, not a swappable backend. |
 | **Factory** | `createQueryHandler(deps)` (`src/slack/query-handler.ts`), `createDisconnectCommand(deps)` (`src/slack/disconnect-command.ts`) |
 | **Env vars** | `SLACK_BOT_TOKEN` (`xoxb-…`), `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN` (`xapp-…`) — all in Secrets Manager |
-| **Setup** | [api.slack.com/apps](https://api.slack.com/apps) → create app → **Socket Mode** on → **App-Level Token** with `connections:write` → **OAuth & Permissions** scopes: `app_mentions:read`, `chat:write`, `commands`, `im:history`, `users:read`, `users:read.email` → **Slash Commands** → `/almanac` → install to workspace |
+| **Setup** | [api.slack.com/apps](https://api.slack.com/apps) → create app → **Socket Mode** on → **App-Level Token** with `connections:write` → **OAuth & Permissions** scopes: `app_mentions:read`, `chat:write`, `commands`, `im:history`, `users:read`, `users:read.email` → **Slash Commands** → `/slack-knowledge-bot` → install to workspace |
 | **Verify** | `npm test -- --grep "disconnect-command\|query-handler"` (disconnect ack + revoke flow; full query-handler integration scenarios) |
 
 ---
@@ -39,7 +39,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **What it does** | ACL probe: verifies the asking user can read a Notion page before including it in the answer. The probe hits `GET /v1/pages/{id}` with the user's own OAuth token. |
 | **Port** | `ConnectorVerifier` (`src/connectors/registry.ts`) — probe receives `fetchImpl` |
 | **Factory** | Side-effect registration in `src/connectors/notion.ts`; ACL guard via `createAclGuard({fetchImpl})` (`src/connectors/acl-guard.ts`) |
-| **OAuth** | Authorization Code + PKCE via `almanac-oauth` (Notion provider). Per-user tokens stored in DDB + KMS. |
+| **OAuth** | Authorization Code + PKCE via `slack-knowledge-bot-oauth` (Notion provider). Per-user tokens stored in DDB + KMS. |
 | **Env vars** | `NOTION_OAUTH_CLIENT_ID`, `NOTION_OAUTH_CLIENT_SECRET` (Secrets Manager) |
 | **Setup** | [notion.so/my-integrations](https://www.notion.so/my-integrations) → new **public** integration → type: OAuth → redirect URI `https://{APP_BASE_URL}/oauth/notion/callback` |
 | **Verify** | `npm test -- --grep acl-guard` (200/403/404/null-token/network-error paths, per-source routing, circuit-breaker trip → fail-secure) |
@@ -52,7 +52,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 |---|---|
 | **What it does** | ACL probe: verifies the user can read a Confluence page via `GET /wiki/rest/api/content/{id}`. Same fail-secure posture as Notion. |
 | **Port** | `ConnectorVerifier` (`src/connectors/confluence.ts`) |
-| **OAuth** | Authorization Code + PKCE via `almanac-oauth` (Atlassian provider). Scopes: `read:confluence-content.all`, `read:confluence-space.summary`, `offline_access`. |
+| **OAuth** | Authorization Code + PKCE via `slack-knowledge-bot-oauth` (Atlassian provider). Scopes: `read:confluence-content.all`, `read:confluence-space.summary`, `offline_access`. |
 | **Env vars** | `CONFLUENCE_OAUTH_CLIENT_ID`, `CONFLUENCE_OAUTH_CLIENT_SECRET` (Secrets Manager) |
 | **Setup** | [developer.atlassian.com](https://developer.atlassian.com/console/myapps/) → create OAuth 2.0 (3LO) app → redirect URI `https://{APP_BASE_URL}/oauth/atlassian/callback` → enable scopes above |
 | **Verify** | Covered by acl-guard tests (source-routing test hits the Confluence probe URL) |
@@ -65,7 +65,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 |---|---|
 | **What it does** | ACL probe: verifies the user can read a Drive file via `GET /drive/v3/files/{id}`. Same fail-secure posture. |
 | **Port** | `ConnectorVerifier` (`src/connectors/drive.ts`) |
-| **OAuth** | Authorization Code + PKCE via `almanac-oauth` (Google provider). Scope: `https://www.googleapis.com/auth/drive.readonly`. |
+| **OAuth** | Authorization Code + PKCE via `slack-knowledge-bot-oauth` (Google provider). Scope: `https://www.googleapis.com/auth/drive.readonly`. |
 | **Env vars** | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (Secrets Manager) |
 | **Setup** | [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials → **Web application** OAuth client → redirect URI `https://{APP_BASE_URL}/oauth/google/callback` → enable Drive API |
 | **Verify** | Covered by acl-guard tests |

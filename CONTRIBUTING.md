@@ -51,7 +51,7 @@ Coverage thresholds are enforced at **75 / 60 / 75 / 75** (statements / branches
 
 ## Adding an OAuth provider
 
-1. Add a provider adapter in `packages/oauth/` (the `almanac-oauth` module) and register it.
+1. Add a provider adapter in `packages/oauth/` (the `slack-knowledge-bot-oauth` module) and register it.
 2. Wire it through `src/oauth/router.ts`.
 3. Add the provider's `*_OAUTH_*` env vars to the Zod config schema and `.env.example`.
 4. Cover the signed-`/start`-URL round-trip in `src/oauth/url-token.test.ts`.
@@ -60,7 +60,7 @@ Coverage thresholds are enforced at **75 / 60 / 75 / 75** (statements / branches
 
 This app ships as a Platform tenant: a Helm `chart/`, a `platform.yaml` (Platform +
 BudgetPolicy CRs), and a `gitops/applicationset-entry.yaml`. Per-tenant AWS substrate lives
-in `landing-zone` (the `almanac-platform` component); cluster addons live in `eks-gitops`. Do
+in `landing-zone` (the `slack-knowledge-bot-platform` component); cluster addons live in `eks-gitops`. Do
 not add IAM, cloud resources, or cluster addons to the chart — see
 [ARCHITECTURE.md](./ARCHITECTURE.md#boundaries).
 

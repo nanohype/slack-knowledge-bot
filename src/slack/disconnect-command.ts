@@ -1,8 +1,8 @@
 /**
- * `/almanac disconnect [notion|confluence|drive|all]` slash command.
+ * `/slack-knowledge-bot disconnect [notion|confluence|drive|all]` slash command.
  *
  * Lets a user revoke their own per-source OAuth grants. The revocation
- * flows through almanac-oauth → RevocationEmitter → audit pipeline, so
+ * flows through slack-knowledge-bot-oauth → RevocationEmitter → audit pipeline, so
  * every grant change is logged for compliance.
  *
  * Port-injected: takes the same `identityResolver` + `oauth` ports the
@@ -11,12 +11,12 @@
  * interfaces.
  */
 import type { AllMiddlewareArgs, App, SlackCommandMiddlewareArgs } from "@slack/bolt";
-import type { OAuthRouter } from "almanac-oauth";
+import type { OAuthRouter } from "slack-knowledge-bot-oauth";
 import type { IdentityResolver } from "../identity/types.js";
 import { SUPPORTED_SOURCES, type Source } from "../connectors/types.js";
 import { logger } from "../logger.js";
 
-const USAGE = "Usage: `/almanac disconnect [notion|confluence|drive|all]`";
+const USAGE = "Usage: `/slack-knowledge-bot disconnect [notion|confluence|drive|all]`";
 
 export type DisconnectArgs = SlackCommandMiddlewareArgs & AllMiddlewareArgs;
 
@@ -51,7 +51,7 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
       const info = await client.users.info({ user: slackUserId });
       email = info.user?.profile?.email ?? undefined;
     } catch (err) {
-      logger.warn({ err, slackUserId }, "users.info failed during /almanac disconnect");
+      logger.warn({ err, slackUserId }, "users.info failed during /slack-knowledge-bot disconnect");
     }
     if (!email) {
       await respond({
@@ -98,7 +98,7 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
   return {
     handle,
     registerWith(app) {
-      app.command("/almanac", handle);
+      app.command("/slack-knowledge-bot", handle);
     },
   };
 }

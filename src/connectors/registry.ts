@@ -5,8 +5,8 @@ export type SourceType = RetrievalHit["source"];
 /**
  * A connector verifier probes the source's API to confirm the asking
  * user can read `hit.docId`. The OAuth access token is supplied by the
- * caller (acl-guard → almanac-oauth getValidToken) rather than pulled
- * from an Almanac-local token bag.
+ * caller (acl-guard → slack-knowledge-bot-oauth getValidToken) rather than pulled
+ * from an SlackKnowledgeBot-local token bag.
  *
  * `fetchImpl` is injected per call so acl-guard controls the HTTP port
  * in one place. Tests hand in a `vi.fn<typeof fetch>()`; production

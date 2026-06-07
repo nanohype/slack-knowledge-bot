@@ -6,7 +6,7 @@
  * Run inside a running pod (the only thing with network access to the
  * private-subnet Aurora) via:
  *
- *   kubectl -n tenants-protohype exec -it deploy/almanac -- \
+ *   kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- \
  *     node dist/scripts/seed-demo.js
  *
  * Re-running is safe (ON CONFLICT ... DO UPDATE). This is a demo
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     port: Number(process.env.PGPORT ?? 5432),
     user,
     password,
-    database: process.env.PGDATABASE ?? "almanac",
+    database: process.env.PGDATABASE ?? "slack-knowledge-bot",
     ssl: { rejectUnauthorized: false },
     max: 2,
   });
