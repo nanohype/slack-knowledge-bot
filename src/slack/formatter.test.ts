@@ -48,7 +48,9 @@ describe("formatAnswer", () => {
   });
   it("includes footer on every response", () => {
     const result = formatAnswer("Answer", [fresh], false, false);
-    expect(result.blocks.find((b) => JSON.stringify(b).includes("Almanac"))).toBeDefined();
+    expect(
+      result.blocks.find((b) => JSON.stringify(b).includes("SlackKnowledgeBot")),
+    ).toBeDefined();
   });
 });
 

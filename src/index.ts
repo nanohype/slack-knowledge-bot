@@ -1,5 +1,5 @@
 /**
- * Almanac bootstrap.
+ * SlackKnowledgeBot bootstrap.
  *
  * Builds every external-IO client once (Redis, SQS, DDB, Bedrock, the
  * retrieval backend, OAuth router) and hands them to the service
@@ -28,7 +28,7 @@ import { createGenerator } from "./rag/generator.js";
 import { createAuditLogger } from "./audit/audit-logger.js";
 import { createQueryHandler } from "./slack/query-handler.js";
 import { createDisconnectCommand } from "./slack/disconnect-command.js";
-import { createAlmanacOAuth, SOURCE_TO_PROVIDER } from "./oauth/router.js";
+import { createSlackKnowledgeBotOAuth, SOURCE_TO_PROVIDER } from "./oauth/router.js";
 import { signOAuthStartUrl } from "./oauth/url-token.js";
 import { nodeReqToWebRequest, writeWebResponse } from "./oauth/http.js";
 import { getRedis } from "./redis.js";
@@ -145,7 +145,7 @@ const generator = createGenerator({
 
 const aclGuard = createAclGuard({ fetchImpl: fetch, onCounter: counter });
 
-const { router: oauth, storage: oauthStorage } = createAlmanacOAuth({ auditLogger });
+const { router: oauth, storage: oauthStorage } = createSlackKnowledgeBotOAuth({ auditLogger });
 
 const queryHandler = createQueryHandler({
   rateLimiter,
@@ -158,7 +158,7 @@ const queryHandler = createQueryHandler({
   oauthStorage,
   signOAuthStartUrl,
   sourceToProvider: SOURCE_TO_PROVIDER,
-  workspaceId: "almanac",
+  workspaceId: "slack-knowledge-bot",
   appBaseUrl: config.APP_BASE_URL,
   userPerHour: config.RATE_LIMIT_USER_PER_HOUR,
   workspacePerHour: config.RATE_LIMIT_WORKSPACE_PER_HOUR,
@@ -186,7 +186,7 @@ const httpServer = http.createServer(async (req, res) => {
   try {
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", service: "almanac" }));
+      res.end(JSON.stringify({ status: "ok", service: "slack-knowledge-bot" }));
       return;
     }
 
@@ -245,7 +245,7 @@ process.on("uncaughtException", (err) => {
   httpServer.listen(3001);
   try {
     await app.start();
-    logger.info({ env: config.NODE_ENV }, "Almanac is running");
+    logger.info({ env: config.NODE_ENV }, "SlackKnowledgeBot is running");
   } catch (err) {
     // Bolt (Socket Mode) auth failure — usually a bad SLACK_APP_TOKEN or a
     // transient Slack outage. Keep the HTTP server up so /health and

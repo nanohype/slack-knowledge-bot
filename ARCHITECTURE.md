@@ -1,20 +1,20 @@
 # Architecture
 
-`slack-knowledge-bot` (internal service handle: **almanac**) is an internal Slack bot that answers employee questions over Notion, Confluence, and Google Drive — grounded in the asking user's own access-controlled documents, with every answer cited. This document covers the bounded contexts, the load-bearing decisions, the per-query data flow, and where the boundaries sit relative to the rest of the stack.
+`slack-knowledge-bot` (internal service handle: **slack-knowledge-bot**) is an internal Slack bot that answers employee questions over Notion, Confluence, and Google Drive — grounded in the asking user's own access-controlled documents, with every answer cited. This document covers the bounded contexts, the load-bearing decisions, the per-query data flow, and where the boundaries sit relative to the rest of the stack.
 
 ## Bounded contexts
 
 The system organizes around seven contexts. Each is a directory of `createXxx(deps)` factories taking typed ports; `src/index.ts` is the one place real SDK clients are constructed and threaded in.
 
-| Context        | Module path                                | What it owns                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **slack**      | `src/slack/`                               | `createQueryHandler` orchestrates the pipeline; `createDisconnectCommand` is the `/almanac disconnect [source\|all]` self-service revoke; `formatter.ts` builds Block Kit replies (answers, citations, OAuth prompts, rate-limit + error messages with trace IDs)                                                                                                                          |
-| **identity**   | `src/identity/`                            | `createWorkOSResolver` maps Slack user → workforce-directory user via WorkOS Directory Sync, cached in DynamoDB (1h TTL). Bearer-API-key auth — no service-token refresh, no L2 cache                                                                                                                                                                                                      |
-| **oauth**      | `src/oauth/` + `packages/oauth/`           | `createAlmanacOAuth` builds the OAuth router (Notion/Atlassian/Google providers + DDB+KMS storage + a revocation emitter into the audit pipeline). `url-token.ts` signs/verifies the short-lived `/start` URLs handed to users; `http.ts` bridges node:http ↔ Web-standard Request/Response. The provider adapters + storage live in the `almanac-oauth` package (`file:./packages/oauth`) |
-| **connectors** | `src/connectors/`                          | `createAclGuard` verifies per-user access per source via a `ConnectorVerifier` registry (`notion.ts`/`confluence.ts`/`drive.ts`). Each source gets its own circuit breaker (threshold 5, 60s window, 30s half-open). Fail-secure                                                                                                                                                           |
-| **rag**        | `src/rag/`                                 | `createRetriever` runs k-NN (Bedrock Titan embeddings) + BM25 against a narrow `RetrievalBackend` port (null / pgvector / custom adapter), fused via Reciprocal Rank Fusion. `createGenerator` calls Claude Sonnet 4.6 via Bedrock with a strict system prompt over the verified-accessible documents                                                                                      |
-| **audit**      | `src/audit/` + `src/bin/audit-consumer.ts` | `createAuditLogger` emits audit events to SQS (at-least-once → DLQ → `AuditTotalLoss` metric); `pii-scrubber.ts` strips email/phone/SSN/card/AWS-account/PAT/token/JWT/API-key patterns at the boundary. The consumer binary long-poll-drains SQS → DynamoDB (90d TTL) + S3 (1y lifecycle)                                                                                                 |
-| **ratelimit**  | `src/ratelimit/`                           | `createRateLimiter` is a Redis sliding-window limiter (per-user + per-workspace). Fail-open                                                                                                                                                                                                                                                                                                |
+| Context        | Module path                                | What it owns                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **slack**      | `src/slack/`                               | `createQueryHandler` orchestrates the pipeline; `createDisconnectCommand` is the `/slack-knowledge-bot disconnect [source\|all]` self-service revoke; `formatter.ts` builds Block Kit replies (answers, citations, OAuth prompts, rate-limit + error messages with trace IDs)                                                                                                                                    |
+| **identity**   | `src/identity/`                            | `createWorkOSResolver` maps Slack user → workforce-directory user via WorkOS Directory Sync, cached in DynamoDB (1h TTL). Bearer-API-key auth — no service-token refresh, no L2 cache                                                                                                                                                                                                                            |
+| **oauth**      | `src/oauth/` + `packages/oauth/`           | `createSlackKnowledgeBotOAuth` builds the OAuth router (Notion/Atlassian/Google providers + DDB+KMS storage + a revocation emitter into the audit pipeline). `url-token.ts` signs/verifies the short-lived `/start` URLs handed to users; `http.ts` bridges node:http ↔ Web-standard Request/Response. The provider adapters + storage live in the `slack-knowledge-bot-oauth` package (`file:./packages/oauth`) |
+| **connectors** | `src/connectors/`                          | `createAclGuard` verifies per-user access per source via a `ConnectorVerifier` registry (`notion.ts`/`confluence.ts`/`drive.ts`). Each source gets its own circuit breaker (threshold 5, 60s window, 30s half-open). Fail-secure                                                                                                                                                                                 |
+| **rag**        | `src/rag/`                                 | `createRetriever` runs k-NN (Bedrock Titan embeddings) + BM25 against a narrow `RetrievalBackend` port (null / pgvector / custom adapter), fused via Reciprocal Rank Fusion. `createGenerator` calls Claude Sonnet 4.6 via Bedrock with a strict system prompt over the verified-accessible documents                                                                                                            |
+| **audit**      | `src/audit/` + `src/bin/audit-consumer.ts` | `createAuditLogger` emits audit events to SQS (at-least-once → DLQ → `AuditTotalLoss` metric); `pii-scrubber.ts` strips email/phone/SSN/card/AWS-account/PAT/token/JWT/API-key patterns at the boundary. The consumer binary long-poll-drains SQS → DynamoDB (90d TTL) + S3 (1y lifecycle)                                                                                                                       |
+| **ratelimit**  | `src/ratelimit/`                           | `createRateLimiter` is a Redis sliding-window limiter (per-user + per-workspace). Fail-open                                                                                                                                                                                                                                                                                                                      |
 
 Cross-cutting: `src/util/circuit-breaker.ts` (a pure, timer-less breaker the ACL guard and retriever share), `src/metrics.ts` (OTel timing/counter surface), `src/context.ts` (OTel active-span wrapper), `src/config/` (Zod env validation, fail-fast at boot), `src/logger.ts` (Pino to stderr, OTel trace correlation).
 
@@ -34,7 +34,7 @@ The two failure modes are deliberately opposite because the two checks protect d
 
 ### Per-user OAuth tokens in DynamoDB + KMS, not Secrets Manager
 
-Each user delegates a per-source OAuth token, stored in DynamoDB with KMS envelope encryption (the `almanac-oauth` `DDBKmsTokenStorage`). Secrets Manager would be the obvious home, but per-user secrets there cost on the order of ~$4k/month at 10k users versus ~$10/month for DDB + KMS at the same scale. App-level shared secrets (Slack/WorkOS/OAuth client credentials, DB creds) still live in Secrets Manager and reach the pod via the chart's `ExternalSecret`; only the high-cardinality per-user tokens go to DDB+KMS.
+Each user delegates a per-source OAuth token, stored in DynamoDB with KMS envelope encryption (the `slack-knowledge-bot-oauth` `DDBKmsTokenStorage`). Secrets Manager would be the obvious home, but per-user secrets there cost on the order of ~$4k/month at 10k users versus ~$10/month for DDB + KMS at the same scale. App-level shared secrets (Slack/WorkOS/OAuth client credentials, DB creds) still live in Secrets Manager and reach the pod via the chart's `ExternalSecret`; only the high-cardinality per-user tokens go to DDB+KMS.
 
 ## Data flow: a single query
 
@@ -53,7 +53,7 @@ Each user delegates a per-source OAuth token, stored in DynamoDB with KMS envelo
 10. audit event → SQS → (KEDA-scaled consumer) → DynamoDB (90d) + S3 (1y)
 ```
 
-The generator handles empty context gracefully — if the retriever's breaker is open (returns empty hits) or every document is redacted, the bot says so rather than hallucinating. Token revocations from the `/almanac disconnect` command flow through the OAuth port's revocation emitter into the same audit pipeline.
+The generator handles empty context gracefully — if the retriever's breaker is open (returns empty hits) or every document is redacted, the bot says so rather than hallucinating. Token revocations from the `/slack-knowledge-bot disconnect` command flow through the OAuth port's revocation emitter into the same audit pipeline.
 
 ## What this repo deliberately does NOT do
 
@@ -69,7 +69,7 @@ This repo owns the application — source, chart, Platform CR, gitops entry. Eve
 
 ### Substrate → `landing-zone`
 
-`landing-zone/components/aws/almanac-platform/` provisions the per-tenant AWS data plane and does not move here:
+`landing-zone/components/aws/slack-knowledge-bot-platform/` provisions the per-tenant AWS data plane and does not move here:
 
 - 3 DynamoDB tables (token store, identity cache, audit log)
 - Aurora Serverless v2 with pgvector (the retrieval backend)
@@ -77,15 +77,15 @@ This repo owns the application — source, chart, Platform CR, gitops entry. Eve
 - SQS queue + DLQ (the audit pipeline)
 - S3 audit bucket
 - KMS token key
-- Secrets Manager seeding (`almanac/<env>/*`)
+- Secrets Manager seeding (`slack-knowledge-bot/<env>/*`)
 
-Its `irsa_role_arn` output is the role almanac's app pods assume — plumbed into the chart through the per-env `aws.platformRoleArn` Helm value. The chart contains **no inline IAM**; the trust relationship is owned in landing-zone and consumed by reference.
+Its `irsa_role_arn` output is the role slack-knowledge-bot's app pods assume — plumbed into the chart through the per-env `aws.platformRoleArn` Helm value. The chart contains **no inline IAM**; the trust relationship is owned in landing-zone and consumed by reference.
 
 ### Cluster addons → `eks-gitops`
 
 The chart assumes these cluster-level capabilities are already installed and reconciled by `eks-gitops`:
 
-- **External Secrets Operator** — backs `externalsecret.yaml` (syncs `almanac/<env>/app-secrets` + `db-credentials` from Secrets Manager)
+- **External Secrets Operator** — backs `externalsecret.yaml` (syncs `slack-knowledge-bot/<env>/app-secrets` + `db-credentials` from Secrets Manager)
 - **KEDA** — backs `audit-consumer-scaledobject.yaml` (scales the audit consumer 0..5 on SQS queue depth)
 - **ingress-nginx** + **cert-manager** — back `ingress.yaml` (TLS for `/health` and the OAuth callback routes)
 - **observability stack** — the cluster OTel Collector (`otel-collector.observability.svc.cluster.local:4318`) and log forwarder that carry traces/metrics/logs to Grafana Cloud. The app emits OTLP and structured JSON to stderr; there are no per-pod sidecars. The `prometheusrule.yaml` alerts and the `grafana-dashboard.yaml` dashboard load into that stack.

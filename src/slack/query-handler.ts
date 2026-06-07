@@ -3,7 +3,7 @@ import { App, AllMiddlewareArgs, SayFn, SlackEventMiddlewareArgs } from "@slack/
 import { requestContext } from "../context.js";
 import type { AclGuard } from "../connectors/acl-guard.js";
 import { SUPPORTED_SOURCES, type Source } from "../connectors/types.js";
-import type { OAuthRouter, TokenStorage } from "almanac-oauth";
+import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
 import type { IdentityResolver } from "../identity/types.js";
 import type { RateLimiter } from "../ratelimit/redis-limiter.js";
 import type { Retriever } from "../rag/retriever.js";
@@ -240,7 +240,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     const queryText = event.text.replace(/<@[A-Z0-9]+>/g, "").trim();
     if (!queryText) {
       await say({
-        text: "Hi! Ask me anything about the knowledge base. Example: `@almanac What is our vacation policy?`",
+        text: "Hi! Ask me anything about the knowledge base. Example: `@slack-knowledge-bot What is our vacation policy?`",
         thread_ts: event.ts,
       });
       return;

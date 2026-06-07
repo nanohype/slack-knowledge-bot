@@ -6,7 +6,7 @@ replicaCount: 1
 
 ingress:
   hosts:
-    - host: almanac-staging.example.com
+    - host: slack-knowledge-bot-staging.example.com
       paths:
         - path: /health
           pathType: Exact
@@ -14,24 +14,24 @@ ingress:
           pathType: Prefix
 
 externalSecret:
-  remoteRefSecret: almanac/staging/app-secrets
-  dbCredentialsSecret: almanac/staging/db-credentials
+  remoteRefSecret: slack-knowledge-bot/staging/app-secrets
+  dbCredentialsSecret: slack-knowledge-bot/staging/db-credentials
 
 env:
   NODE_ENV: production
-  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=almanac,service.version=0.1.0,deployment.environment=staging,agents.tenant=protohype,agents.platform=almanac"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=slack-knowledge-bot,service.version=0.1.0,deployment.environment=staging,agents.tenant=protohype,agents.platform=slack-knowledge-bot"
 
 aws:
-  # Fill from landing-zone `almanac-platform` (staging) output: irsa_role_arn.
-  # `tofu -chdir=live/aws/workload-staging/us-west-2/staging/almanac-platform output -raw irsa_role_arn`
+  # Fill from landing-zone `slack-knowledge-bot-platform` (staging) output: irsa_role_arn.
+  # `tofu -chdir=live/aws/workload-staging/us-west-2/staging/slack-knowledge-bot-platform output -raw irsa_role_arn`
   platformRoleArn: ""
 
 tenantInfra:
-  # Fill the empties below from the landing-zone almanac-platform staging
+  # Fill the empties below from the landing-zone slack-knowledge-bot-platform staging
   # outputs (terragrunt output -json). Slot names match output names 1:1.
-  dynamodbTableTokens: almanac-tokens-staging
-  dynamodbTableAudit: almanac-audit-staging
-  dynamodbTableIdentityCache: almanac-identity-cache-staging
+  dynamodbTableTokens: slack-knowledge-bot-staging-tokens
+  dynamodbTableAudit: slack-knowledge-bot-staging-audit
+  dynamodbTableIdentityCache: slack-knowledge-bot-staging-identity-cache
   sqsAuditQueueUrl: ""
   sqsAuditDlqUrl: ""
   redisUrl: ""

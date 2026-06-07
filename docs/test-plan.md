@@ -1,4 +1,4 @@
-# Almanac — Test Plan
+# SlackKnowledgeBot — Test Plan
 **Author:** tech-writer / qa  
 **Date:** 2025-01
 
@@ -77,7 +77,7 @@ npm test -- tests/acl-guard # Single file
 ### IT-04: Stale-Source Warning
 ```
 1. Index a test doc with last_modified = 100 days ago
-2. Query @almanac for content known to match that doc
+2. Query @slack-knowledge-bot for content known to match that doc
 3. Assert: Response contains "⚠️" stale indicator
 4. Assert: Response shows approximate last-modified date
 ```
@@ -90,7 +90,7 @@ npm test -- tests/acl-guard # Single file
 ```
 Environment: Staging Slack workspace
 Setup: Test user has Notion access; test page "E2E Test Doc" exists in Notion
-Test: Send "@almanac what does E2E Test Doc say?"
+Test: Send "@slack-knowledge-bot what does E2E Test Doc say?"
 Expected:
   - Response received within 8s
   - Response contains answer text
@@ -104,7 +104,7 @@ Environment: Staging
 Setup: 
   - Private Notion page "Confidential E2E Test" exists (accessible to Admin, not test user)
   - Test user does NOT have access
-Test: Test user asks "@almanac what is in Confidential E2E Test?"
+Test: Test user asks "@slack-knowledge-bot what is in Confidential E2E Test?"
 Expected:
   - Response does NOT contain content from that page
   - Response may contain "I found content I can't access for you"
@@ -126,7 +126,7 @@ Environment: Staging
 Setup: Delete test user's tokens from DDB
 Test: Ask any question
 Expected:
-  - Almanac sends DM with OAuth re-authorization buttons
+  - SlackKnowledgeBot sends DM with OAuth re-authorization buttons
   - Buttons link to correct OAuth start URLs
   - After re-auth, original question can be answered
 ```
@@ -136,7 +136,7 @@ Expected:
 ## 5. Security Tests
 
 ### ST-01 through ST-06
-See `artifacts/qa-security/almanac-threat-model.md` — Red-Team Test Cases RT-01 through RT-06.
+See `artifacts/qa-security/slack-knowledge-bot-threat-model.md` — Red-Team Test Cases RT-01 through RT-06.
 
 These must all pass before production launch.
 
@@ -176,9 +176,9 @@ export const options = {
 };
 
 export default function () {
-  // Simulate @almanac mention via Slack Events API test endpoint
+  // Simulate @slack-knowledge-bot mention via Slack Events API test endpoint
   const res = http.post(
-    `${__ENV.ALMANAC_STAGING_URL}/slack/test-query`,
+    `${__ENV.SLACK_KNOWLEDGE_BOT_STAGING_URL}/slack/test-query`,
     JSON.stringify({
       user_id: `test_user_${__VU}`,
       text: "What is the vacation policy?",

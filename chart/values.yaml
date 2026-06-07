@@ -1,4 +1,4 @@
-# Base values for almanac (all environments). Per-env deltas in values-{staging,production}.yaml.
+# Base values for slack-knowledge-bot (all environments). Per-env deltas in values-{staging,production}.yaml.
 
 image:
   repository: ghcr.io/nanohype/slack-knowledge-bot
@@ -20,12 +20,20 @@ serviceAccount:
   annotations: {}
 
 aws:
-  # ARN of the IRSA role almanac's pods assume. Comes from landing-zone's
-  # almanac-platform component (output: irsa_role_arn). Empty at the chart
+  # ARN of the IRSA role slack-knowledge-bot's pods assume. Comes from landing-zone's
+  # slack-knowledge-bot-platform component (output: irsa_role_arn). Empty at the chart
   # level — per-env values plumb in the actual ARN. Empty value omits the
   # eks.amazonaws.com/role-arn annotation entirely (useful for local
   # helm-template / kind smoke runs where no real IAM role exists).
   platformRoleArn: ""
+
+# Resource attributes the shared chart labels read (tenant-chart-base.labels →
+# agents.nanohype.dev/{tenant,platform}). The OTEL_RESOURCE_ATTRIBUTES env var
+# under `env:` carries the same values into the app's OTel SDK at runtime.
+otel:
+  resourceAttributes:
+    agents.tenant: protohype
+    agents.platform: slack-knowledge-bot
 
 resources:
   requests:
@@ -89,11 +97,11 @@ externalSecret:
   secretStore: aws-secrets-manager
   refreshInterval: 1h
   # Source secret in AWS Secrets Manager — composed per-env as
-  # almanac/<env>/app-secrets by the platform reconciler. The chart references
+  # slack-knowledge-bot/<env>/app-secrets by the platform reconciler. The chart references
   # this via the externalsecret template's `data` keys.
-  remoteRefSecret: "" # set per-env (almanac/<env>/app-secrets)
+  remoteRefSecret: "" # set per-env (slack-knowledge-bot/<env>/app-secrets)
   # RDS master credentials secret name (provisioned by landing-zone rag component)
-  dbCredentialsSecret: "" # set per-env (almanac/<env>/db-credentials)
+  dbCredentialsSecret: "" # set per-env (slack-knowledge-bot/<env>/db-credentials)
 
 prometheusRule:
   # Ships the rules to Mimir via the kube-prometheus-stack PrometheusRule CR.
@@ -196,40 +204,40 @@ env:
   RATE_LIMIT_USER_PER_HOUR: "20"
   RATE_LIMIT_WORKSPACE_PER_HOUR: "500"
   STALE_DOC_THRESHOLD_DAYS: "90"
-  TOKEN_STORE_ENCRYPTION_CONTEXT: almanac-token-store
+  TOKEN_STORE_ENCRYPTION_CONTEXT: slack-knowledge-bot-token-store
   NODE_ENV: production
   # OTel — exports to cluster-level Collector (otel-collector.observability.svc)
   # provisioned by eks-gitops. No per-pod sidecar.
-  OTEL_SERVICE_NAME: almanac
+  OTEL_SERVICE_NAME: slack-knowledge-bot
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_TRACES_SAMPLER: always_on
   OTEL_METRICS_EXPORTER: otlp
   OTEL_METRIC_EXPORT_INTERVAL: "60000"
   # Resource attrs — agents.tenant/agents.platform required by PLATFORM_TENANT_CONTRACT
-  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=almanac,service.version=0.1.0,agents.tenant=protohype,agents.platform=almanac"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=slack-knowledge-bot,service.version=0.1.0,agents.tenant=protohype,agents.platform=slack-knowledge-bot"
 
 # Per-tenant infrastructure references — populated by per-env values from
-# the landing-zone almanac-platform component's outputs. Empty at the chart
+# the landing-zone slack-knowledge-bot-platform component's outputs. Empty at the chart
 # level for local dev (where the binaries may use local stubs or kind-side
 # mocks).
 tenantInfra:
-  # DynamoDB tables (3) — almanac-platform: aws_dynamodb_table.{tokens,audit,identity_cache}.name
+  # DynamoDB tables (3) — slack-knowledge-bot-platform: aws_dynamodb_table.{tokens,audit,identity_cache}.name
   dynamodbTableTokens: ""
   dynamodbTableAudit: ""
   dynamodbTableIdentityCache: ""
-  # SQS audit queue + DLQ — almanac-platform: aws_sqs_queue.{audit,audit_dlq}.url
+  # SQS audit queue + DLQ — slack-knowledge-bot-platform: aws_sqs_queue.{audit,audit_dlq}.url
   sqsAuditQueueUrl: ""
   sqsAuditDlqUrl: ""
-  # ElastiCache Redis endpoint — almanac-platform: aws_elasticache_replication_group.this.primary_endpoint_address
+  # ElastiCache Redis endpoint — slack-knowledge-bot-platform: aws_elasticache_replication_group.this.primary_endpoint_address
   redisUrl: ""
-  # KMS key for token envelope encryption — almanac-platform: aws_kms_key.token_store.id
+  # KMS key for token envelope encryption — slack-knowledge-bot-platform: aws_kms_key.token_store.id
   kmsKeyId: ""
-  # Aurora Serverless v2 (pgvector) endpoint — almanac-platform: module.aurora.cluster_endpoint
+  # Aurora Serverless v2 (pgvector) endpoint — slack-knowledge-bot-platform: module.aurora.cluster_endpoint
   pgHost: ""
   pgPort: "5432"
-  pgDatabase: almanac
-  # S3 audit-archive bucket — almanac-platform: aws_s3_bucket.audit.bucket
+  pgDatabase: slack_knowledge_bot
+  # S3 audit-archive bucket — slack-knowledge-bot-platform: aws_s3_bucket.audit.bucket
   auditBucket: ""
 
 nodeSelector: {}

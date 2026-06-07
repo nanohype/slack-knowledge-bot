@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "almanac.fullname" . }}
+  name: {{ include "tenant-chart-base.fullname" . }}
   labels:
-    {{- include "almanac.labels" . | nindent 4 }}
+    {{- include "tenant-chart-base.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -13,18 +13,18 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      {{- include "almanac.selectorLabels" . | nindent 6 }}
+      {{- include "tenant-chart-base.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "almanac.labels" . | nindent 8 }}
+        {{- include "tenant-chart-base.labels" . | nindent 8 }}
       annotations:
         # Roll the pods when the ExternalSecret-managed Secret changes.
         # Without this the Deployment keeps the old env vars cached on the pod
         # spec hash; ExternalSecret writes are picked up on next pod restart only.
         checksum/external-secret: {{ printf "%s-%s" .Values.externalSecret.remoteRefSecret .Values.externalSecret.refreshInterval | sha256sum }}
     spec:
-      serviceAccountName: {{ include "almanac.serviceAccountName" . }}
+      serviceAccountName: {{ include "tenant-chart-base.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -44,7 +44,7 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             # Per-tenant infra references — fed by per-env Helm values from
-            # the landing-zone almanac-platform component's outputs. Empty
+            # the landing-zone slack-knowledge-bot-platform component's outputs. Empty
             # base values are a local-dev fallback.
             - name: DYNAMODB_TABLE_TOKENS
               value: {{ .Values.tenantInfra.dynamodbTableTokens | quote }}
@@ -73,7 +73,7 @@ spec:
             # the AWS Secrets Manager JSON keys (SLACK_BOT_TOKEN, etc.) plus
             # the RDS-credentials sub-secret keys (PGUSER, PGPASSWORD).
             - secretRef:
-                name: {{ include "almanac.fullname" . }}-secrets
+                name: {{ include "tenant-chart-base.fullname" . }}-secrets
           livenessProbe:
             {{- toYaml .Values.probes.liveness | nindent 12 }}
           readinessProbe:

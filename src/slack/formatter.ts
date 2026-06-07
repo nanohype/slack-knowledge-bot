@@ -23,7 +23,7 @@ const SOURCE_NAMES: Record<SourceCitation["source"], string> = {
   drive: "Google Drive",
 };
 
-const FOOTER_TEXT = `Powered by *Almanac* ${EMOJI.EM_DASH} answers are grounded in NanoCorp's knowledge base.`;
+const FOOTER_TEXT = `Powered by *SlackKnowledgeBot* ${EMOJI.EM_DASH} answers are grounded in NanoCorp's knowledge base.`;
 const REDACTED_TEXT = `${EMOJI.LOCK} _Note: Some relevant documents were not accessible under your account. You may need to request access._`;
 
 function section(text: string): SlackBlock {
@@ -83,7 +83,9 @@ export function formatOAuthPrompt(
   authLinks: Record<string, string>,
 ): FormattedResponse {
   const blocks: SlackBlock[] = [
-    section("To answer your question, Almanac needs access to the following knowledge sources:"),
+    section(
+      "To answer your question, SlackKnowledgeBot needs access to the following knowledge sources:",
+    ),
   ];
   for (const source of sources) {
     blocks.push({
@@ -99,12 +101,12 @@ export function formatOAuthPrompt(
   }
   blocks.push(
     context(
-      "Almanac only reads documents you have access to. Your credentials are encrypted and stored securely.",
+      "SlackKnowledgeBot only reads documents you have access to. Your credentials are encrypted and stored securely.",
     ),
   );
   return {
     blocks,
-    text: "Almanac needs access to your knowledge sources to answer this question.",
+    text: "SlackKnowledgeBot needs access to your knowledge sources to answer this question.",
   };
 }
 

@@ -19,7 +19,7 @@ defining control is that **no query ever sees more than the asking user could se
 - The ACL check is **fail-secure**: a missing token, a 403/404, a timeout, a network error,
   or an open circuit breaker all drop the document from results. A user only ever sees an
   answer grounded in documents they can already open.
-- `/almanac disconnect [source|all]` lets a user revoke the bot's delegated access to their
+- `/slack-knowledge-bot disconnect [source|all]` lets a user revoke the bot's delegated access to their
   own accounts at any time; revocations flow through the audit pipeline.
 
 ### Identity & secrets
@@ -29,7 +29,7 @@ defining control is that **no query ever sees more than the asking user could se
 - Per-user OAuth tokens are stored in DynamoDB under **KMS envelope encryption**, never in
   Secrets Manager (per-user secrets would cost orders of magnitude more at scale).
 - App-level secrets are projected at deploy time by External Secrets Operator from AWS
-  Secrets Manager (`almanac/<env>/*`) into a Kubernetes Secret — never committed.
+  Secrets Manager (`slack-knowledge-bot/<env>/*`) into a Kubernetes Secret — never committed.
 - Identity is resolved Slack user → workforce user via WorkOS Directory Sync; the bot acts
   only on behalf of a resolved, directory-known user.
 

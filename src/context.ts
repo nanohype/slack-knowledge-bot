@@ -14,7 +14,7 @@
  */
 import { trace, SpanStatusCode, type Span } from "@opentelemetry/api";
 
-const tracer = trace.getTracer("almanac");
+const tracer = trace.getTracer("slack-knowledge-bot");
 
 export interface RequestContext {
   traceId?: string;

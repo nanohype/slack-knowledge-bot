@@ -1,7 +1,7 @@
 {
-  "name": "almanac-oauth",
+  "name": "slack-knowledge-bot-oauth",
   "version": "0.1.0",
-  "description": "Almanac per-user OAuth delegation — scaffolded from nanohype module-oauth-delegation",
+  "description": "SlackKnowledgeBot per-user OAuth delegation — scaffolded from nanohype module-oauth-delegation",
   "type": "module",
   "main": "dist/oauth/index.js",
   "types": "dist/oauth/index.d.ts",

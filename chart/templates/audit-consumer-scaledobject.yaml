@@ -4,7 +4,7 @@
 # role (podIdentity: aws), so no separate credentials secret is needed.
 #
 # Required IAM permission for the IRSA role: sqs:GetQueueAttributes on the
-# audit queue ARN. The Platform CR's almanac-sqs-consumer policy includes
+# audit queue ARN. The Platform CR's slack-knowledge-bot-sqs-consumer policy includes
 # this alongside ReceiveMessage / DeleteMessage / SendMessage.
 #
 # Set `keda.enabled: false` to disable KEDA scaling and manage replicas
@@ -13,13 +13,13 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ include "almanac.fullname" . }}-audit-consumer
+  name: {{ include "tenant-chart-base.fullname" . }}-audit-consumer
   labels:
-    {{- include "almanac.labels" . | nindent 4 }}
-    almanac.io/service: audit-consumer
+    {{- include "tenant-chart-base.labels" . | nindent 4 }}
+    slack-knowledge-bot.io/service: audit-consumer
 spec:
   scaleTargetRef:
-    name: {{ include "almanac.fullname" . }}-audit-consumer
+    name: {{ include "tenant-chart-base.fullname" . }}-audit-consumer
   pollingInterval: {{ .Values.auditConsumer.keda.pollingInterval }}
   cooldownPeriod: {{ .Values.auditConsumer.keda.cooldownPeriod }}
   minReplicaCount: {{ .Values.auditConsumer.keda.minReplicas }}

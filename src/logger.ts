@@ -1,5 +1,5 @@
 /**
- * Structured JSON logger for Almanac.
+ * Structured JSON logger for SlackKnowledgeBot.
  *
  * Trace correlation is pulled from the active OTel span on every log call,
  * so any code running inside `requestContext.run(...)` (or any auto-
@@ -27,7 +27,7 @@ function traceFields(): { trace_id?: string; span_id?: string } {
 export const logger = pino(
   {
     level: config.NODE_ENV === "production" ? "info" : "debug",
-    base: { service: "almanac" },
+    base: { service: "slack-knowledge-bot" },
     timestamp: pino.stdTimeFunctions.isoTime,
     mixin: () => traceFields(),
   },

@@ -1,7 +1,7 @@
 {
-  "name": "almanac",
+  "name": "slack-knowledge-bot",
   "version": "0.1.0",
-  "description": "Almanac — Slack bot for NanoCorp knowledge retrieval",
+  "description": "SlackKnowledgeBot — Slack bot for NanoCorp knowledge retrieval",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -21,8 +21,8 @@
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
     "audit:prod": "npm audit --audit-level=high --omit=dev",
     "chart:lint": "helm lint chart",
-    "chart:template:staging": "helm template almanac chart -f chart/values-staging.yaml",
-    "chart:template:production": "helm template almanac chart -f chart/values-production.yaml"
+    "chart:template:staging": "helm template slack-knowledge-bot chart -f chart/values-staging.yaml",
+    "chart:template:production": "helm template slack-knowledge-bot chart -f chart/values-production.yaml"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1030.0",
@@ -34,7 +34,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.76.0",
     "@slack/bolt": "^4.7.0",
     "@smithy/node-http-handler": "^4.5.2",
-    "almanac-oauth": "file:./packages/oauth",
+    "slack-knowledge-bot-oauth": "file:./packages/oauth",
     "ioredis": "^5.10.1",
     "pg": "^8.20.0",
     "pino": "^10.3.1",

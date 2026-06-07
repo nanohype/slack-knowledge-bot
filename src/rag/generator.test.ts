@@ -87,7 +87,7 @@ describe("createGenerator", () => {
     expect(body.system).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Almanac"),
+        text: expect.stringContaining("SlackKnowledgeBot"),
         cache_control: { type: "ephemeral" },
       },
     ]);

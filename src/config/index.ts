@@ -29,7 +29,7 @@ const ConfigSchema = z.object({
   PGPORT: z.coerce.number().default(5432),
   PGUSER: z.string().default(""),
   PGPASSWORD: z.string().default(""),
-  PGDATABASE: z.string().default("almanac"),
+  PGDATABASE: z.string().default("slack_knowledge_bot"),
   KMS_KEY_ID: z.string(),
   REDIS_URL: z.string(),
 
@@ -61,9 +61,9 @@ const ConfigSchema = z.object({
   STALE_DOC_THRESHOLD_DAYS: z.coerce.number().default(90),
   CRAWL_INTERVAL_MINUTES: z.coerce.number().default(30),
 
-  TOKEN_STORE_ENCRYPTION_CONTEXT: z.string().default("almanac-token-store"),
+  TOKEN_STORE_ENCRYPTION_CONTEXT: z.string().default("slack-knowledge-bot-token-store"),
 
-  // OAuth delegation (almanac-oauth / module-oauth-delegation).
+  // OAuth delegation (slack-knowledge-bot-oauth / module-oauth-delegation).
   // HMAC-SHA256 signing key for the state cookie AND for the signed OAuth
   // start URLs we hand to users in Slack. Must be ≥ 32 bytes of randomness.
   STATE_SIGNING_SECRET: z.string().min(32),

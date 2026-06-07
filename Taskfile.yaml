@@ -42,7 +42,7 @@ tasks:
       - npm run check
 
   oauth:
-    desc: "almanac-oauth package: lint + typecheck + test + build"
+    desc: "slack-knowledge-bot-oauth package: lint + typecheck + test + build"
     dir: packages/oauth
     cmds:
       - npm run lint

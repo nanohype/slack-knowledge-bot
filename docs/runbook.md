@@ -1,4 +1,4 @@
-# Almanac — Operator Runbook
+# SlackKnowledgeBot — Operator Runbook
 **Version:** 1.0  
 **Author:** tech-writer  
 **Audience:** NanoCorp DevOps / Platform Engineering
@@ -9,21 +9,21 @@
 
 | Property | Value |
 |----------|-------|
-| Service name | Almanac |
+| Service name | SlackKnowledgeBot |
 | Purpose | Slack bot for NanoCorp knowledge retrieval |
-| Slack handle | @almanac |
+| Slack handle | @slack-knowledge-bot |
 | AWS account | NanoCorp Production |
 | AWS region | us-west-2 |
-| ECS cluster | almanac-production |
-| ECS service | almanac-production |
-| ECR repo | almanac-production |
+| ECS cluster | slack-knowledge-bot-production |
+| ECS service | slack-knowledge-bot-production |
+| ECR repo | slack-knowledge-bot-production |
 
 ---
 
 ## 2. Architecture Quick Reference
 
 ```
-Slack → ECS Fargate (almanac) → RDS Postgres pgvector (search)
+Slack → ECS Fargate (slack-knowledge-bot) → RDS Postgres pgvector (search)
                               → DynamoDB (tokens, audit cache, identity)
                               → ElastiCache Redis (rate limiting)
                               → SQS → Lambda → DDB + S3 (audit log)
@@ -42,7 +42,7 @@ Deploys are operator-local from a workstation (or a release runner) with AWS cre
 
 ```bash
 # 1. Bootstrap CDK (one-time per account/region)
-cd almanac/infra && npm install
+cd slack-knowledge-bot/infra && npm install
 npx cdk bootstrap aws://ACCOUNT_ID/us-west-2
 cd ..
 
@@ -51,25 +51,25 @@ cd ..
 #    comes from, rotation) lives at docs/secrets.md.
 #    Tl;dr:
 #      aws secretsmanager put-secret-value \
-#        --secret-id almanac/staging/app-secrets \
-#        --secret-string file:///tmp/almanac-staging-secrets.json
+#        --secret-id slack-knowledge-bot/staging/app-secrets \
+#        --secret-string file:///tmp/slack-knowledge-bot-staging-secrets.json
 
 # 3. (For real OAuth) pick one HTTPS shape — providers reject non-HTTPS callbacks.
 #    Preferred: CDK-managed cert + Route 53 alias (zero post-deploy clicks).
-export ALMANAC_STAGING_DOMAIN=almanac-staging.example.com
-export ALMANAC_STAGING_HOSTED_ZONE_ID=Z01234ABCDEF
+export SLACK_KNOWLEDGE_BOT_STAGING_DOMAIN=slack-knowledge-bot-staging.example.com
+export SLACK_KNOWLEDGE_BOT_STAGING_HOSTED_ZONE_ID=Z01234ABCDEF
 #    Or BYO cert ARN (escape hatch when ACM is owned by a separate team):
-#    export ALMANAC_STAGING_CERT_ARN=arn:aws:acm:us-west-2:...:certificate/...
+#    export SLACK_KNOWLEDGE_BOT_STAGING_CERT_ARN=arn:aws:acm:us-west-2:...:certificate/...
 
 # 4. Deploy staging
 npm run deploy:staging
-# install:all → build:oauth → check → audit:prod → cdk deploy AlmanacStaging → smoke:staging
+# install:all → build:oauth → check → audit:prod → cdk deploy SlackKnowledgeBotStaging → smoke:staging
 # Smoke reads ServiceUrl from CFN, waits for ECS steady state, curls /health,
 # verifies /oauth/notion/start returns non-5xx.
 
 # 5. Deploy production after staging passes
-export ALMANAC_PRODUCTION_DOMAIN=almanac.example.com
-export ALMANAC_PRODUCTION_HOSTED_ZONE_ID=Z01234ABCDEF
+export SLACK_KNOWLEDGE_BOT_PRODUCTION_DOMAIN=slack-knowledge-bot.example.com
+export SLACK_KNOWLEDGE_BOT_PRODUCTION_HOSTED_ZONE_ID=Z01234ABCDEF
 npm run deploy:production
 ```
 
@@ -82,8 +82,8 @@ Same one-shot npm script — re-run any time:
 # to decide between HTTPS+cert and HTTP-only-smoke ALB listeners; an
 # accidentally-empty deploy into a stack that previously had HTTPS
 # enabled trips a listener-port collision — see docs/qa-playbook.md B.1).
-export ALMANAC_STAGING_DOMAIN=almanac.example.com
-export ALMANAC_STAGING_HOSTED_ZONE_ID=Z01234…
+export SLACK_KNOWLEDGE_BOT_STAGING_DOMAIN=slack-knowledge-bot.example.com
+export SLACK_KNOWLEDGE_BOT_STAGING_HOSTED_ZONE_ID=Z01234…
 
 npm run deploy:staging        # or deploy:production
 ```
@@ -99,7 +99,7 @@ npm run smoke:production
 
 ### 3.3 CI
 
-CI lives at the repo root: `.github/workflows/almanac-ci.yml`. Triggers on push to `main` and on PRs touching `almanac/**` or the workflow file. Steps (every gate must exit zero):
+CI lives at the repo root: `.github/workflows/slack-knowledge-bot-ci.yml`. Triggers on push to `main` and on PRs touching `slack-knowledge-bot/**` or the workflow file. Steps (every gate must exit zero):
 
 1. `actions/checkout@v4`
 2. `actions/setup-node@v4`, node-version `24`, npm cache
@@ -109,7 +109,7 @@ CI lives at the repo root: `.github/workflows/almanac-ci.yml`. Triggers on push 
 6. `npm run typecheck`
 7. `npm run test`
 8. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
-9. install + `cdk synth AlmanacStaging` under `almanac/infra/`
+9. install + `cdk synth SlackKnowledgeBotStaging` under `slack-knowledge-bot/infra/`
 
 CI carries no AWS credentials. Production cuts run from an operator workstation or a release runner, gated by the smoke step embedded in `npm run deploy:production`.
 
@@ -125,9 +125,9 @@ All configuration is via environment variables (injected from ECS task definitio
 | `SLACK_SIGNING_SECRET` | Request signature verification | `abc123...` |
 | `SLACK_APP_TOKEN` | Socket Mode token | `xapp-...` |
 | `AWS_REGION` | AWS region | `us-west-2` |
-| `DYNAMODB_TABLE_TOKENS` | Token store table | `almanac-tokens-production` |
-| `DYNAMODB_TABLE_AUDIT` | Audit log table | `almanac-audit-production` |
-| `DYNAMODB_TABLE_IDENTITY_CACHE` | Identity cache | `almanac-identity-cache-production` |
+| `DYNAMODB_TABLE_TOKENS` | Token store table | `slack-knowledge-bot-production-tokens` |
+| `DYNAMODB_TABLE_AUDIT` | Audit log table | `slack-knowledge-bot-production-audit` |
+| `DYNAMODB_TABLE_IDENTITY_CACHE` | Identity cache | `slack-knowledge-bot-production-identity-cache` |
 | `SQS_AUDIT_QUEUE_URL` | Audit event queue | `https://sqs...` |
 | `SQS_AUDIT_DLQ_URL` | Audit DLQ | `https://sqs...` |
 | `RETRIEVAL_BACKEND_URL` | Retrieval backend URL (optional; composed from `PG*` if blank) | `postgresql://…` |
@@ -136,7 +136,7 @@ All configuration is via environment variables (injected from ECS task definitio
 | `REDIS_URL` | ElastiCache Redis URL | `rediss://xxx.cache.amazonaws.com:6379` |
 | `WORKOS_API_KEY` | WorkOS Bearer API key | `sk_…` (Secrets Manager) |
 | `WORKOS_DIRECTORY_ID` | WorkOS Directory Sync directory id | `directory_01…` (Secrets Manager — seeded alongside the API key) |
-| `APP_BASE_URL` | OAuth redirect base URL | `https://almanac.nanocorp.internal` |
+| `APP_BASE_URL` | OAuth redirect base URL | `https://slack-knowledge-bot.nanocorp.internal` |
 | `RATE_LIMIT_USER_PER_HOUR` | Per-user query limit | `20` |
 | `RATE_LIMIT_WORKSPACE_PER_HOUR` | Workspace query limit | `500` |
 | `STALE_DOC_THRESHOLD_DAYS` | Staleness threshold | `90` |
@@ -148,8 +148,8 @@ All configuration is via environment variables (injected from ECS task definitio
 ```bash
 # ECS service health
 aws ecs describe-services \
-  --cluster almanac-production \
-  --services almanac-production \
+  --cluster slack-knowledge-bot-production \
+  --services slack-knowledge-bot-production \
   --query 'services[0].{desired:desiredCount,running:runningCount,pending:pendingCount}'
 
 # Application health endpoint (from within VPC)
@@ -157,7 +157,7 @@ curl http://TASK_IP:3001/health
 
 # CloudWatch alarms
 aws cloudwatch describe-alarms \
-  --alarm-name-prefix "AlmanacProduction" \
+  --alarm-name-prefix "SlackKnowledgeBotProduction" \
   --state-value ALARM
 ```
 
@@ -165,12 +165,12 @@ aws cloudwatch describe-alarms \
 
 ## 6. Monitoring & Alerts
 
-Almanac's observability stack is OTel-first — app logs go to **Grafana Cloud
+SlackKnowledgeBot's observability stack is OTel-first — app logs go to **Grafana Cloud
 Loki** (via the Fluent Bit FireLens sidecar), traces + metrics go to **Grafana
 Cloud Tempo + Mimir** (via the ADOT collector sidecar, OTLP on `localhost:4318`).
 CloudWatch is still the alarm backplane for infrastructure-level signals
 (SQS DLQ depth, ECS service health) and the four app-level metrics the
-`src/metrics.ts` emitter still publishes to the `Almanac` namespace; every
+`src/metrics.ts` emitter still publishes to the `SlackKnowledgeBot` namespace; every
 alarm fans out through a single SNS topic (`AlarmTopicArn` stack output) to
 PagerDuty / Slack / email.
 
@@ -193,12 +193,12 @@ live in Mimir. Query them in Grafana Cloud Explore or via the ops dashboard.
 ### 6.2 Logs → Grafana Cloud Loki
 
 All app stdout/stderr ships to Loki via the Fluent Bit sidecar. Static stream
-labels: `service=almanac,environment={env},source=ecs`. Per-record labels:
+labels: `service=slack-knowledge-bot,environment={env},source=ecs`. Per-record labels:
 `$level`, `$traceId`. Jump from a trace in Tempo → the log stream for that
 `trace_id` with one click.
 
 Break-glass: Fluent Bit's own stderr (bootstrap / Loki push failures) lands in
-the CloudWatch log group `/almanac/{env}/forwarder-diagnostics` — open that
+the CloudWatch log group `/slack-knowledge-bot/{env}/forwarder-diagnostics` — open that
 when Grafana is showing silence and you suspect the forwarder.
 
 ### 6.3 CloudWatch alarms (infrastructure + SLO backstop)
@@ -209,15 +209,15 @@ PagerDuty, a Slack webhook, or an email to the topic.
 | Alarm ID | Source | Threshold | Notes |
 |---|---|---|---|
 | `AuditDlqDepthAlarm` | `auditDlq` metricApproximateNumberOfMessagesVisible | ≥ 1 | Compliance — see RB-01 |
-| `QueryP95LatencyAlarm` | `Almanac` namespace `QueryLatency` p95 | > 5000ms for 3 × 5min | See RB-02 |
-| `LLMErrorAlarm` | `Almanac` namespace `LLMError` Sum | ≥ 5 in 5min | Bedrock failure rate |
-| `AuditTotalLossAlarm` | `Almanac` namespace `AuditTotalLoss` Sum | ≥ 1 in 5min | Primary SQS + DLQ both failed — compliance-critical |
+| `QueryP95LatencyAlarm` | `SlackKnowledgeBot` namespace `QueryLatency` p95 | > 5000ms for 3 × 5min | See RB-02 |
+| `LLMErrorAlarm` | `SlackKnowledgeBot` namespace `LLMError` Sum | ≥ 5 in 5min | Bedrock failure rate |
+| `AuditTotalLossAlarm` | `SlackKnowledgeBot` namespace `AuditTotalLoss` Sum | ≥ 1 in 5min | Primary SQS + DLQ both failed — compliance-critical |
 
 ```bash
 # Who is paged when these fire? (Lists topic subscriptions.)
 aws sns list-subscriptions-by-topic \
   --topic-arn "$(aws cloudformation describe-stacks \
-     --stack-name AlmanacProduction \
+     --stack-name SlackKnowledgeBotProduction \
      --query "Stacks[0].Outputs[?OutputKey=='AlarmTopicArn'].OutputValue" \
      --output text)"
 ```
@@ -232,9 +232,9 @@ to the full trace in Tempo in one click.
 
 ### 6.5 Dashboards
 
-The primary ops dashboard lives in **Grafana Cloud → Dashboards → `Almanac`**
+The primary ops dashboard lives in **Grafana Cloud → Dashboards → `SlackKnowledgeBot`**
 (provisioned out-of-band; not managed by this stack). CloudWatch no longer
-hosts an Almanac dashboard — app metrics stopped flowing there when the OTel
+hosts an SlackKnowledgeBot dashboard — app metrics stopped flowing there when the OTel
 migration landed.
 
 ---
@@ -260,7 +260,7 @@ aws sqs receive-message \
 
 # 3. Check Lambda audit consumer errors
 aws logs filter-log-events \
-  --log-group-name /aws/lambda/almanac-audit-consumer-production \
+  --log-group-name /aws/lambda/slack-knowledge-bot-audit-consumer-production \
   --start-time $(date -d '1 hour ago' +%s000) \
   --filter-pattern ERROR
 
@@ -285,7 +285,7 @@ aws sqs change-message-visibility-batch \
 
 ```bash
 # 1. Find slow queries in Loki (query via Grafana Cloud → Explore → Loki):
-#    {service="almanac", environment="production"} |= "query processed" | json | latencyMs > 3000
+#    {service="slack-knowledge-bot", environment="production"} |= "query processed" | json | latencyMs > 3000
 #    Then copy a `trace_id` and pivot to Tempo for the full span tree.
 
 # 2. Compare query_latency histogram in Mimir against baseline:
@@ -294,7 +294,7 @@ aws sqs change-message-visibility-batch \
 
 # 3. Bedrock latency: the auto-instrumented `aws-sdk` span group has the
 #    InvocationLatency broken down per model in Tempo. Filter by
-#    service.name=almanac AND rpc.method=InvokeModel.
+#    service.name=slack-knowledge-bot AND rpc.method=InvokeModel.
 
 # 4. If Bedrock is the bottleneck:
 #    - Check Bedrock service quotas (tokens per minute)
@@ -303,7 +303,7 @@ aws sqs change-message-visibility-batch \
 
 # 4. If ACL checks are the bottleneck:
 #    - Check source system API latency (Notion/Confluence/Drive)
-#    - Source system may be rate-limiting Almanac's service account
+#    - Source system may be rate-limiting SlackKnowledgeBot's service account
 ```
 
 ### RB-03: ACL Check Error Rate > 1%
@@ -313,17 +313,17 @@ aws sqs change-message-visibility-batch \
 
 ```bash
 # Recent ACL-probe non-auth errors (Grafana Cloud → Explore → Loki):
-#   {service="almanac"} |= "ACL probe non-auth error"
+#   {service="slack-knowledge-bot"} |= "ACL probe non-auth error"
 # Redactions by source:
 #   sum by (source) (rate(redaction_count_total[5m]))    # in Mimir
 
 # Circuit-breaker trips (one trip = O(5) consecutive failures → fail-secure):
-#   {service="almanac"} |= "ACL probe short-circuited"
+#   {service="slack-knowledge-bot"} |= "ACL probe short-circuited"
 #   or: circuit_open_total{source="notion|confluence|drive"} in Mimir
 
 # 401s typically mean user-specific token refresh — expected during
 # extended user absence. Check getValidToken warnings:
-#   {service="almanac"} |= "getValidToken failed"
+#   {service="slack-knowledge-bot"} |= "getValidToken failed"
 ```
 
 ### RB-04: ECS Service Not Running
@@ -333,21 +333,21 @@ aws sqs change-message-visibility-batch \
 ```bash
 # Get task failure reasons
 aws ecs describe-tasks \
-  --cluster almanac-production \
-  --tasks $(aws ecs list-tasks --cluster almanac-production --query 'taskArns[]' --output text)
+  --cluster slack-knowledge-bot-production \
+  --tasks $(aws ecs list-tasks --cluster slack-knowledge-bot-production --query 'taskArns[]' --output text)
 
 # Roll a fresh image — re-runs the CDK asset build and deploys the new digest
 npm run deploy:production
 
 # Force the existing task def to redeploy (no code change, no asset rebuild)
 aws ecs update-service \
-  --cluster almanac-production \
-  --service almanac-production \
+  --cluster slack-knowledge-bot-production \
+  --service slack-knowledge-bot-production \
   --force-new-deployment
 
 # Rollback to a previous task definition revision
 PREV_TASK_DEF=$(aws ecs describe-task-definition \
-  --task-definition almanac-production \
+  --task-definition slack-knowledge-bot-production \
   --query 'taskDefinition.taskDefinitionArn' --output text | \
   sed 's/:[0-9]*$//')
 # Update service to use a specific previous task def number, e.g. PREV_TASK_DEF:42
@@ -362,7 +362,7 @@ PREV_TASK_DEF=$(aws ecs describe-task-definition \
 ```bash
 # Check Redis cluster status
 aws elasticache describe-replication-groups \
-  --replication-group-id almanac-production
+  --replication-group-id slack-knowledge-bot-production
 
 # If cluster is down, ECS will log warnings but continue serving
 # Rate limiting will not be enforced until Redis recovers
@@ -378,13 +378,13 @@ aws elasticache describe-replication-groups \
 
 ```bash
 # Last crawl time for each source (Grafana Cloud → Explore → Loki):
-#   {service="almanac"} |= "crawl complete"
+#   {service="slack-knowledge-bot"} |= "crawl complete"
 
 # Force immediate re-crawl (e.g., after bulk doc updates)
 # Send a message to the crawl trigger queue or restart the ECS task
 aws ecs update-service \
-  --cluster almanac-production \
-  --service almanac-production \
+  --cluster slack-knowledge-bot-production \
+  --service slack-knowledge-bot-production \
   --force-new-deployment
 
 # Check pgvector chunk count
@@ -396,12 +396,12 @@ psql "$RETRIEVAL_BACKEND_URL" -c "SELECT count(*) FROM chunks"
 ## 9. Security Incident Response
 
 ### If cross-space data leak is suspected:
-1. Immediately disable @almanac in Slack (revoke Bot Token in Slack app settings)
+1. Immediately disable @slack-knowledge-bot in Slack (revoke Bot Token in Slack app settings)
 2. Page NanoCorp Security team
 3. Export audit logs for the affected time window:
    ```bash
    aws dynamodb query \
-     --table-name almanac-audit-production \
+     --table-name slack-knowledge-bot-production-audit \
      --key-condition-expression "userId = :uid" \
      --expression-attribute-values '{":uid":{"S":"AFFECTED_USER_ID"}}'
    ```

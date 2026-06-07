@@ -1,4 +1,4 @@
-# Almanac — RAG Architecture & AI Design
+# SlackKnowledgeBot — RAG Architecture & AI Design
 **Author:** eng-ai  
 **Date:** 2025-01
 
@@ -8,7 +8,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           ALMANAC QUERY PIPELINE                            │
+│                           SLACK_KNOWLEDGE_BOT QUERY PIPELINE                            │
 │                                                                             │
 │  Slack Event ──► Slack Gateway ──► Identity Resolver ──► ACL Guard         │
 │                      (ECS)            (WorkOS Directory)        (per-user OAuth)  │
@@ -218,7 +218,7 @@
 ## 4. System Prompt
 
 ```
-You are Almanac, an internal knowledge assistant for NanoCorp. You answer employee questions using ONLY the provided source documents.
+You are SlackKnowledgeBot, an internal knowledge assistant for NanoCorp. You answer employee questions using ONLY the provided source documents.
 
 Rules:
 1. Answer based solely on the provided [CONTEXT] documents. Do not use outside knowledge.
@@ -253,7 +253,7 @@ DynamoDB token store lookup
      └── Token missing / expired
               │
               ▼
-         Send DM: "Almanac needs access to [Notion/Confluence/Drive].
+         Send DM: "SlackKnowledgeBot needs access to [Notion/Confluence/Drive].
                    Click here to authorize: {oauth_link}"
               │
               ▼ (user completes OAuth)
@@ -279,7 +279,7 @@ Parallelized via `Promise.all` across all hits. Each check adds ~50-100ms.
 | Hit redacted (403) | "I found a potentially relevant document but don't have permission to access it on your behalf." |
 | All hits redacted | "I found some potentially relevant documents, but none are accessible under your account. You may need to request access." |
 | No hits at all | "I didn't find relevant information in the knowledge base for your question." |
-| OAuth missing | "To answer this question, Almanac needs access to [source]. Please authorize: {link}" |
+| OAuth missing | "To answer this question, SlackKnowledgeBot needs access to [source]. Please authorize: {link}" |
 
 ---
 
@@ -335,7 +335,7 @@ EVAL_DATASET = [
 def test_citation_present():
     """Every answer must contain at least one citation."""
     for case in EVAL_DATASET:
-        response = almanac.query(case["question"], user=TEST_USER)
+        response = slack-knowledge-bot.query(case["question"], user=TEST_USER)
         assert len(response.citations) >= 1
 
 def test_no_hallucination():
@@ -345,7 +345,7 @@ def test_no_hallucination():
 
 def test_stale_warning():
     """Stale docs must surface warning."""
-    response = almanac.query("old policy question", user=TEST_USER)
+    response = slack-knowledge-bot.query("old policy question", user=TEST_USER)
     for citation in response.citations:
         if citation.days_old > 90:
             assert "⚠️" in citation.formatted

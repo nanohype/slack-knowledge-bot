@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { OAuthRouter } from "almanac-oauth";
+import type { OAuthRouter } from "slack-knowledge-bot-oauth";
 import type { IdentityResolver } from "../identity/types.js";
 import { createDisconnectCommand, type DisconnectArgs } from "./disconnect-command.js";
 

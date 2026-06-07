@@ -15,71 +15,71 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ include "almanac.fullname" . }}
+  name: {{ include "tenant-chart-base.fullname" . }}
   labels:
-    {{- include "almanac.labels" . | nindent 4 }}
+    {{- include "tenant-chart-base.labels" . | nindent 4 }}
     {{- with .Values.prometheusRule.selector }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   groups:
-    - name: almanac.slo
+    - name: slack-knowledge-bot.slo
       interval: 1m
       rules:
-        - alert: AlmanacQueryP95LatencyBreach
-          expr: histogram_quantile(0.95, sum by (le) (rate(almanac_query_latency_ms_bucket[5m]))) > 5000
+        - alert: SlackKnowledgeBotQueryP95LatencyBreach
+          expr: histogram_quantile(0.95, sum by (le) (rate(slack_knowledge_bot_query_latency_ms_bucket[5m]))) > 5000
           for: 15m
           labels:
             severity: page
-            service: almanac
+            service: slack-knowledge-bot
             slo: query-p95-under-5s
           annotations:
-            summary: Almanac query P95 latency > 5s for 15 minutes
+            summary: SlackKnowledgeBot query P95 latency > 5s for 15 minutes
             description: |
               P95 query latency over the last 5 minutes is {{ "{{" }} $value | printf "%.0f" {{ "}}" }} ms (>5000 ms).
               Runbook: docs/runbook.md § "Query latency SLO breach"
 
-        - alert: AlmanacLLMErrorRateSpike
-          expr: sum(rate(almanac_llm_error_total[5m])) >= 0.0167
+        - alert: SlackKnowledgeBotLLMErrorRateSpike
+          expr: sum(rate(slack_knowledge_bot_llm_error_total[5m])) >= 0.0167
           for: 5m
           labels:
             severity: page
-            service: almanac
+            service: slack-knowledge-bot
           annotations:
-            summary: Almanac Bedrock LLM errors >= 5 in 5 minutes
+            summary: SlackKnowledgeBot Bedrock LLM errors >= 5 in 5 minutes
             description: |
               LLM (Bedrock) error rate is {{ "{{" }} $value | printf "%.4f" {{ "}}" }}/s (≥ 5 errors per 5 minutes).
               Likely causes: Bedrock throttling, model deprecation, IAM regression on the Platform IRSA role.
               Runbook: docs/runbook.md § "LLM errors"
 
-        - alert: AlmanacAuditTotalLoss
-          expr: sum(rate(almanac_audit_total_loss_total[5m])) > 0
+        - alert: SlackKnowledgeBotAuditTotalLoss
+          expr: sum(rate(slack_knowledge_bot_audit_total_loss_total[5m])) > 0
           for: 5m
           labels:
             severity: page
-            service: almanac
+            service: slack-knowledge-bot
             compliance: lost-audit-event
           annotations:
-            summary: Almanac lost audit event(s) — primary SQS and DLQ both failed
+            summary: SlackKnowledgeBot lost audit event(s) — primary SQS and DLQ both failed
             description: |
               Compliance-critical: an audit event failed both the primary SQS send AND the DLQ fallback.
               Runbook: docs/runbook.md § "Audit total loss"
 
-    - name: almanac.audit-queue
+    - name: slack-knowledge-bot.audit-queue
       interval: 1m
       rules:
-        - alert: AlmanacAuditDlqDepthHigh
+        - alert: SlackKnowledgeBotAuditDlqDepthHigh
           # Requires cloudwatch-exporter or aws-cloudwatch-agent feeding
           # AWS/SQS metrics into Mimir. Adjust the label selectors to match
           # your exporter's relabel config.
-          expr: max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~"almanac-audit-dlq-.*"}) >= 1
+          expr: max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~"slack-knowledge-bot-audit-dlq-.*"}) >= 1
           for: 5m
           labels:
             severity: page
-            service: almanac
+            service: slack-knowledge-bot
             compliance: dlq-depth
           annotations:
-            summary: Almanac audit DLQ has messages — audit log delivery failing
+            summary: SlackKnowledgeBot audit DLQ has messages — audit log delivery failing
             description: |
               {{ "{{" }} $value | printf "%.0f" {{ "}}" }} message(s) in the audit DLQ. Primary SQS path is failing
               (or messages are being rejected by the audit Lambda / consumer pod).
