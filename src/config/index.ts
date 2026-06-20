@@ -30,6 +30,17 @@ const ConfigSchema = z.object({
   PGUSER: z.string().default(""),
   PGPASSWORD: z.string().default(""),
   PGDATABASE: z.string().default("slack_knowledge_bot"),
+  // Postgres TLS. RDS/Aurora present a server cert signed by the Amazon RDS
+  // CA. Default verifies the cert against the bundled RDS global CA
+  // (`certs/rds-global-bundle.pem`, baked into the image) so the DB link is
+  // authenticated-encrypted, not just encrypted. Set
+  // PG_SSL_REJECT_UNAUTHORIZED=false for a local/dev Postgres that has no
+  // trusted chain. PG_SSL_CA_PATH overrides the bundle location.
+  PG_SSL_REJECT_UNAUTHORIZED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  PG_SSL_CA_PATH: z.string().default("certs/rds-global-bundle.pem"),
   KMS_KEY_ID: z.string(),
   REDIS_URL: z.string(),
 
@@ -59,7 +70,6 @@ const ConfigSchema = z.object({
   RATE_LIMIT_USER_PER_HOUR: z.coerce.number().default(20),
   RATE_LIMIT_WORKSPACE_PER_HOUR: z.coerce.number().default(500),
   STALE_DOC_THRESHOLD_DAYS: z.coerce.number().default(90),
-  CRAWL_INTERVAL_MINUTES: z.coerce.number().default(30),
 
   TOKEN_STORE_ENCRYPTION_CONTEXT: z.string().default("slack-knowledge-bot-token-store"),
 

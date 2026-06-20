@@ -33,6 +33,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 
+# Amazon RDS global CA bundle — used to verify the Aurora server cert for
+# Postgres TLS (src/config PG_SSL_CA_PATH default). Resolved relative to the
+# /app WORKDIR at runtime.
+COPY certs ./certs
+
 USER slack-knowledge-bot
 
 EXPOSE 3001

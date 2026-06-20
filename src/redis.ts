@@ -1,10 +1,11 @@
 /**
  * Shared Redis client singleton.
  *
- * The rate limiter consumes this via the port injected at factory time.
- * Kept in its own module so tests can `vi.mock("ioredis")` once and have
- * both consumers see the same mock instance, and so the connection config
- * (TLS, timeouts, retries) lives in exactly one place.
+ * The rate limiter consumes this via the `RateLimiterRedisPort` injected at
+ * factory time — tests pass a port fake, never `vi.mock("ioredis")` (the
+ * SDK-mock ban is grep-enforced in CI). Kept in its own module so the
+ * connection config (TLS, timeouts, retries) lives in exactly one place and
+ * every consumer shares the one client singleton.
  */
 import { Redis } from "ioredis";
 import { config } from "./config/index.js";

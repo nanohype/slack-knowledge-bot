@@ -17,6 +17,16 @@ const LLM_TIMEOUT_MS = 30000;
 
 const CompletionResponseSchema = z.object({
   content: z.array(z.object({ text: z.string() })).min(1, "Bedrock returned empty content array"),
+  // Claude-on-Bedrock returns token accounting; metered so the AI path's cost
+  // is observable per-query and in aggregate (cache_read reflects the
+  // system-prompt cache breakpoint above). Optional — absent on error shapes.
+  usage: z
+    .object({
+      input_tokens: z.number().optional(),
+      output_tokens: z.number().optional(),
+      cache_read_input_tokens: z.number().optional(),
+    })
+    .optional(),
 });
 
 const SYSTEM_PROMPT = `You are SlackKnowledgeBot, an internal knowledge assistant. Answer employee questions using ONLY the provided source documents.
@@ -42,7 +52,7 @@ export interface GeneratorConfig {
   llmModelId: string;
   staleThresholdDays: number;
   now?: () => number;
-  onCounter?: (metric: string) => void;
+  onCounter?: (metric: string, value?: number) => void;
   onTiming?: (metric: string, ms: number) => void;
 }
 
@@ -108,6 +118,11 @@ export function createGenerator(deps: GeneratorConfig): Generator {
         timing("LLMLatency", now() - llmStart);
         const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
         const parsed = CompletionResponseSchema.parse(raw);
+        const usage = parsed.usage;
+        if (usage?.input_tokens != null) counter("LLMInputTokens", usage.input_tokens);
+        if (usage?.output_tokens != null) counter("LLMOutputTokens", usage.output_tokens);
+        if (usage?.cache_read_input_tokens != null)
+          counter("LLMCacheReadTokens", usage.cache_read_input_tokens);
         const answerText: string = parsed.content[0].text;
         const seen = new Set<string>();
         const citations: SourceCitation[] = accessibleHits

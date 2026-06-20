@@ -33,11 +33,7 @@ import {
   type AttributeValue,
   type QueryCommandOutput,
 } from "@aws-sdk/client-dynamodb";
-import {
-  DecryptCommand,
-  GenerateDataKeyCommand,
-  KMSClient,
-} from "@aws-sdk/client-kms";
+import { DecryptCommand, GenerateDataKeyCommand, KMSClient } from "@aws-sdk/client-kms";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 

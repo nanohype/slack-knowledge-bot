@@ -15,6 +15,7 @@ import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Pool } from "pg";
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import { config } from "./config/index.js";
 import { createRateLimiter } from "./ratelimit/redis-limiter.js";
 import { createWorkOSResolver } from "./identity/workos-resolver.js";
@@ -76,6 +77,27 @@ function composePgUrlFromEnv(): string {
   return `postgresql://${user}:${pw}@${host}:${port}/${db}`;
 }
 
+// Postgres TLS config. Default: verify the server cert against the bundled
+// RDS global CA (authenticated encryption). If the CA file is unreadable we
+// log and degrade to encrypted-but-unverified rather than crash-loop the pod
+// — operators silence this by setting PG_SSL_CA_PATH or
+// PG_SSL_REJECT_UNAUTHORIZED=false.
+function buildPgSsl(): false | { ca?: string; rejectUnauthorized: boolean } {
+  if (!config.PG_SSL_REJECT_UNAUTHORIZED) {
+    return { rejectUnauthorized: false };
+  }
+  try {
+    const ca = readFileSync(config.PG_SSL_CA_PATH, "utf8");
+    return { ca, rejectUnauthorized: true };
+  } catch (err) {
+    logger.error(
+      { err, path: config.PG_SSL_CA_PATH },
+      "pg TLS: CA bundle unreadable; falling back to encrypted-but-unverified",
+    );
+    return { rejectUnauthorized: false };
+  }
+}
+
 function buildRetrievalBackend(): RetrievalBackend {
   const url = config.RETRIEVAL_BACKEND_URL || composePgUrlFromEnv();
   if (!url) {
@@ -84,19 +106,26 @@ function buildRetrievalBackend(): RetrievalBackend {
   }
   if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
     // RDS Postgres enforces TLS (rds.force_ssl=1 in the default parameter
-    // group). `rejectUnauthorized: false` accepts the AWS-managed cert
-    // without bundling the RDS CA chain — the connection is still
-    // encrypted, only the cert-authority pinning is relaxed.
+    // group). By default we verify the server cert against the bundled RDS
+    // global CA so the link is authenticated-encrypted (MITM-resistant), not
+    // merely encrypted. statement_timeout/query_timeout bound a hung-but-alive
+    // Postgres on the hottest user-path call; the retrieval breaker only sees
+    // failures the driver actually surfaces, so without these a stalled query
+    // would hold the Bolt handler slot indefinitely.
     const pool = new Pool({
       connectionString: url,
       max: 5,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildPgSsl(),
+      statement_timeout: 5_000,
+      query_timeout: 5_000,
+      connectionTimeoutMillis: 2_000,
+      idleTimeoutMillis: 30_000,
     });
     pool.on("error", (err) => logger.error({ err }, "pgvector pool error"));
     // Idempotent schema init. If the DB is unreachable on boot, log and
     // let the retriever error out at query time until it's fixed — no
     // reason to crash the task.
-    void initSchema({ query: pool, embeddingDim: TITAN_EMBEDDING_DIM }).catch((err) =>
+    void initSchema({ pool, embeddingDim: TITAN_EMBEDDING_DIM }).catch((err) =>
       logger.error({ err }, "pgvector schema init failed; retrieval will error until fixed"),
     );
     return createPgvectorBackend({ query: pool, embeddingDim: TITAN_EMBEDDING_DIM });
@@ -210,17 +239,31 @@ const httpServer = http.createServer(async (req, res) => {
   }
 });
 
+// Must stay below the chart's terminationGracePeriodSeconds so the drain
+// completes before the kubelet SIGKILLs the pod.
+const SHUTDOWN_DRAIN_MS = 25_000;
+
 async function shutdown(signal: string) {
   logger.info({ signal }, "shutting down");
-  try {
-    await flushMetrics();
-  } catch (err) {
-    logger.error({ err }, "metrics flush on shutdown failed");
-  }
+  // 1) Stop accepting new Slack events so the in-flight set can only shrink.
   try {
     await app.stop();
   } catch (err) {
     logger.error({ err }, "bolt stop failed");
+  }
+  // 2) Let in-flight queries (LLM + the awaited compliance audit) finish,
+  //    bounded by the drain deadline — otherwise a SIGTERM mid-query drops
+  //    the audit write.
+  try {
+    await queryHandler.drainInFlight(SHUTDOWN_DRAIN_MS);
+  } catch (err) {
+    logger.error({ err }, "in-flight query drain failed");
+  }
+  // 3) Flush metrics last so the drained queries' counters are exported.
+  try {
+    await flushMetrics();
+  } catch (err) {
+    logger.error({ err }, "metrics flush on shutdown failed");
   }
   httpServer.close();
   process.exit(0);
@@ -229,16 +272,21 @@ async function shutdown(signal: string) {
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 
-// Bolt's Socket Mode client reconnects in a detached promise — a bad
-// SLACK_APP_TOKEN throws from there, not from `await app.start()`. Node's
+// Rejections only: Bolt's Socket Mode client reconnects in a detached promise —
+// a bad SLACK_APP_TOKEN throws from there, not from `await app.start()`. Node's
 // default unhandled-rejection behavior is to crash the process, which
 // crash-loops the pod before an operator can rotate secrets. Log and keep
 // serving /health + /oauth/* so the pod stays healthy and probes pass.
+// (A synchronous uncaughtException, below, is NOT swallowed — it exits.)
 process.on("unhandledRejection", (err) => {
   logger.error({ err }, "unhandledRejection (swallowed to keep task alive)");
 });
+// A synchronous uncaught exception leaves the process in an undefined state
+// (half-mutated module/SDK internals). Per Node guidance, log and exit so the
+// orchestrator restarts a clean pod rather than serving from a corrupt one.
 process.on("uncaughtException", (err) => {
-  logger.error({ err }, "uncaughtException (swallowed to keep task alive)");
+  logger.error({ err }, "uncaughtException; exiting for a clean restart");
+  process.exit(1);
 });
 
 (async () => {

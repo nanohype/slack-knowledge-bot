@@ -58,7 +58,9 @@ npm test -- tests/acl-guard # Single file
 ```
 1. Emit audit event via emitAuditEvent()
 2. Poll SQS for message receipt (within 5s)
-3. Trigger Lambda manually or wait for SQS trigger
+3. Let the KEDA-scaled audit-consumer Deployment drain the queue (KEDA scales it
+   up on queue depth); observe it via `kubectl -n tenants-protohype logs
+   deploy/slack-knowledge-bot-audit-consumer` and a draining queue depth
 4. Assert: DDB audit table contains the event
 5. Assert: S3 audit bucket contains the event JSON
 6. Assert: scrubbedQuery field does not contain email/phone/SSN
@@ -211,4 +213,4 @@ All of the following must pass before production deployment:
 | G-07 | Compliance checklist | ops-compliance | 🔲 |
 | G-08 | Security findings (FINDING-01, -02, -03) | qa-security | 🔲 |
 | G-09 | npm audit 0 HIGH/CRITICAL | eng-devex | 🔲 |
-| G-10 | ECR scan 0 HIGH/CRITICAL | eng-infra | 🔲 |
+| G-10 | Container image scan 0 HIGH/CRITICAL (Trivy, GHCR image) | eng-infra | 🔲 |

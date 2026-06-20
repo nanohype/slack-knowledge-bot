@@ -97,6 +97,26 @@ describe("createGenerator", () => {
     expect(body.messages[0]).not.toHaveProperty("content.cache_control");
   });
 
+  it("meters input/output/cache-read token usage from the Bedrock response", async () => {
+    bedrockMock.on(InvokeModelCommand).resolves({
+      body: new TextEncoder().encode(
+        JSON.stringify({
+          content: [{ text: "ok" }],
+          usage: { input_tokens: 120, output_tokens: 45, cache_read_input_tokens: 80 },
+        }),
+      ),
+    } as never);
+    const counts: Array<[string, number | undefined]> = [];
+    const generator = createGenerator({
+      ...BASE_DEPS,
+      onCounter: (metric, value) => counts.push([metric, value]),
+    });
+    await generator.generate("PTO?", [hit()], false);
+    expect(counts).toContainEqual(["LLMInputTokens", 120]);
+    expect(counts).toContainEqual(["LLMOutputTokens", 45]);
+    expect(counts).toContainEqual(["LLMCacheReadTokens", 80]);
+  });
+
   it("marks a citation as stale when its lastModified exceeds the threshold", async () => {
     bedrockMock.on(InvokeModelCommand).resolves(bedrockReply("ok"));
     const generator = createGenerator(BASE_DEPS);
