@@ -370,7 +370,8 @@ describe("query pipeline integration", () => {
 
     const probeFetch = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("api.notion.com")) return jsonResponse({ ok: true }, { status: 200 });
+      if (new URL(url).hostname === "api.notion.com")
+        return jsonResponse({ ok: true }, { status: 200 });
       return jsonResponse({}, { status: 403 });
     }) as unknown as typeof fetch;
 

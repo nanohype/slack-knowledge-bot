@@ -87,7 +87,7 @@ describe("createAclGuard", () => {
   it("isolates per-hit outcomes — a 403 on one source doesn't poison another", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
-      if (url.includes("api.notion.com")) return stubResponse({ status: 200 });
+      if (new URL(url).hostname === "api.notion.com") return stubResponse({ status: 200 });
       return stubResponse({ status: 403 });
     });
     const guard = createAclGuard({ fetchImpl });
