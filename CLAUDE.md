@@ -105,7 +105,7 @@ All config via env vars, validated by Zod in `src/config/index.ts`. Copy `.env.e
 - **OAuth delegation**: `STATE_SIGNING_SECRET` (≥ 32 bytes — HMACs both the module's state cookie and SlackKnowledgeBot's signed `/start` URL tokens)
 - **App**: `APP_BASE_URL`
 
-Defaults: `AWS_REGION=us-west-2`, `BEDROCK_REGION=us-west-2`, `BEDROCK_LLM_MODEL_ID=anthropic.claude-sonnet-4-6`, `BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0`, `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `NODE_ENV=development`.
+Defaults: `AWS_REGION=us-west-2`, `BEDROCK_REGION=us-west-2`, `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-4-6` (cross-region inference profile — the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0`, `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `PG_SSL_REJECT_UNAUTHORIZED=true` (verifies the Aurora cert against the bundled RDS global CA at `certs/rds-global-bundle.pem`; set `false` for a chain-less local Postgres), `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`, `NODE_ENV=development`.
 
 App-level secrets in deployment live in AWS Secrets Manager at `slack-knowledge-bot/{env}/app-secrets`. Per-user OAuth tokens live in DynamoDB with KMS envelope encryption — NOT in Secrets Manager (per-user secrets would cost ~$4k/month at 10k users vs ~$10/month for DDB+KMS).
 

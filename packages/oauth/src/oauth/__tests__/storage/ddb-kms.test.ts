@@ -5,11 +5,7 @@ import {
   PutItemCommand,
   QueryCommand,
 } from "@aws-sdk/client-dynamodb";
-import {
-  DecryptCommand,
-  GenerateDataKeyCommand,
-  KMSClient,
-} from "@aws-sdk/client-kms";
+import { DecryptCommand, GenerateDataKeyCommand, KMSClient } from "@aws-sdk/client-kms";
 import { mockClient } from "aws-sdk-client-mock";
 import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

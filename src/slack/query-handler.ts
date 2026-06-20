@@ -21,6 +21,10 @@ import { logger } from "../logger.js";
 type BoltClient = AllMiddlewareArgs["client"];
 
 const EMAIL_CACHE_TTL_MS = 5 * 60 * 1000;
+// Bound the per-process email cache so a churn of distinct Slack users can't
+// grow it without limit. Oldest insertion is evicted at the cap (the Map
+// preserves insertion order); expired entries are dropped on read.
+const EMAIL_CACHE_MAX = 10_000;
 
 export interface QueryHandlerConfig {
   rateLimiter: RateLimiter;
@@ -54,6 +58,12 @@ export interface ProcessQueryArgs {
 export interface QueryHandler {
   registerWith(app: App): void;
   processQuery(args: ProcessQueryArgs): Promise<void>;
+  /**
+   * Await in-flight queries registered via {@link registerWith}, bounded by
+   * `deadlineMs`. Called on SIGTERM so a shutdown mid-query doesn't drop the
+   * awaited compliance audit. Returns immediately when nothing is in flight.
+   */
+  drainInFlight(deadlineMs: number): Promise<void>;
 }
 
 export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
@@ -61,15 +71,34 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
   const counter = deps.onCounter ?? (() => {});
   const timing = deps.onTiming ?? (() => {});
   const emailCache = new Map<string, { email: string; expiresAt: number }>();
+  const inFlight = new Set<Promise<unknown>>();
+
+  function track(p: Promise<unknown>): Promise<unknown> {
+    inFlight.add(p);
+    // Bookkeeping only — the `.catch` keeps the finally-derived chain from
+    // surfacing as an unhandled rejection when a handler rejects. The caller
+    // awaits the original `p`, so handler errors still propagate to Bolt.
+    void p.finally(() => inFlight.delete(p)).catch(() => {});
+    return p;
+  }
 
   async function getSlackEmail(client: BoltClient, slackUserId: string): Promise<string | null> {
     const t = now();
     const cached = emailCache.get(slackUserId);
-    if (cached && cached.expiresAt > t) return cached.email;
+    if (cached) {
+      if (cached.expiresAt > t) return cached.email;
+      emailCache.delete(slackUserId); // drop expired so it can't pin a slot
+    }
     try {
       const result = await client.users.info({ user: slackUserId });
       const email = result.user?.profile?.email ?? null;
-      if (email) emailCache.set(slackUserId, { email, expiresAt: t + EMAIL_CACHE_TTL_MS });
+      if (email) {
+        if (emailCache.size >= EMAIL_CACHE_MAX) {
+          const oldest = emailCache.keys().next().value;
+          if (oldest !== undefined) emailCache.delete(oldest);
+        }
+        emailCache.set(slackUserId, { email, expiresAt: t + EMAIL_CACHE_TTL_MS });
+      }
       return email;
     } catch (err) {
       logger.warn({ err, slackUserId }, "users.info lookup failed");
@@ -257,8 +286,24 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
 
   return {
     processQuery,
+    async drainInFlight(deadlineMs) {
+      if (inFlight.size === 0) return;
+      logger.info({ inFlight: inFlight.size }, "draining in-flight queries before shutdown");
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, deadlineMs);
+        timer.unref();
+      });
+      try {
+        await Promise.race([Promise.allSettled([...inFlight]).then(() => undefined), deadline]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
     registerWith(app) {
-      app.event("app_mention", handleMention);
+      app.event("app_mention", async (args) => {
+        await track(handleMention(args));
+      });
       app.message(async ({ message, say, client }) => {
         if ((message as { channel_type?: string }).channel_type !== "im") return;
         if ((message as { subtype?: string }).subtype) return;
@@ -269,14 +314,16 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
           ts?: string;
         };
         if (!msg.text || !msg.user) return;
-        await processQuery({
-          userId: msg.user,
-          text: msg.text,
-          channelId: msg.channel ?? "",
-          say,
-          client,
-          ts: msg.ts,
-        });
+        await track(
+          processQuery({
+            userId: msg.user,
+            text: msg.text,
+            channelId: msg.channel ?? "",
+            say,
+            client,
+            ts: msg.ts,
+          }),
+        );
       });
     },
   };

@@ -79,11 +79,11 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **What it does** | Two calls per query: (1) embed the user's question via Titan for k-NN search, (2) generate the grounded answer via Claude Sonnet 4.6 with the verified-accessible documents as context. |
 | **Port** | `BedrockRuntimeClient` (AWS SDK v3). Factories accept the client directly — no custom port type because the SDK is already a typed client. |
 | **Factory** | `createRetriever({openSearch, bedrock, embeddingModelId})` (`src/rag/retriever.ts`), `createGenerator({bedrock, llmModelId, staleThresholdDays, …})` (`src/rag/generator.ts`) |
-| **Auth** | IAM — the ECS task role is granted `bedrock:InvokeModel` on the specific model ARNs. No API key. |
-| **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `anthropic.claude-sonnet-4-6`), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
-| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM permissions are handled by the CDK stack. |
+| **Auth** | IRSA — pods AssumeRoleWithWebIdentity into the landing-zone `slack-knowledge-bot-platform` role, which grants `bedrock:InvokeModel` on the specific model ARNs (listed under the Platform CR's `spec.irsa.policies`). No API key. |
+| **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-4-6` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
+| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the landing-zone `slack-knowledge-bot-platform` component and the Platform CR's IRSA policies — there's no app-level IAM. |
 | **Verify** | `npm test -- --grep "retriever\|generator"` (RRF fusion ranking + dedup, Bedrock failure paths, stale-citation marker, circuit-breaker trip → empty hits) |
-| **Security** | Model invocation logging is force-disabled by the CDK stack via `AwsCustomResource` calling `deleteModelInvocationLoggingConfiguration` — source content never reaches CloudWatch or S3 logs. See `docs/threat-model.md`. |
+| **Security** | Inference is on-account, so source content never reaches a third party. Bedrock model-invocation logging is governed at the landing-zone account/region level (an org/substrate concern) — it is not toggled by app code, a request header, or anything in this chart. See `docs/threat-model.md`. |
 
 ---
 
@@ -94,9 +94,9 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **What it does** | k-NN (vector) + BM25 (keyword) retrieval over a `chunks` table in Postgres, fused via Reciprocal Rank Fusion. A generated `tsvector` column handles BM25; the `vector` extension handles k-NN via `<=>` cosine distance + IVFFlat index. |
 | **Port** | `RetrievalBackend` (`src/rag/backends/types.ts`) — two methods: `knnSearch({embedding, topK})` and `textSearch({query, topK})`, each returning `RetrievalHit[]`. Any implementation plugs in. |
 | **Factory** | `createRetriever({backend, bedrock, embeddingModelId})` + `createPgvectorBackend({query, embeddingDim})` |
-| **Auth** | RDS master credentials auto-generated into Secrets Manager; ECS injects them as `PGUSER` / `PGPASSWORD`. Task SG has a dedicated ingress rule to the DB SG on 5432. No public ingress. |
-| **Env vars** | `RETRIEVAL_BACKEND_URL` (takes precedence) OR the individual `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` fields (CDK-injected from RDS + Secrets Manager). Empty → null backend (retriever returns empty hits). |
-| **Setup** | CDK provisions an RDS Postgres `db.t4g.micro` in the private subnet. Schema bootstrap (`CREATE EXTENSION vector` + `CREATE TABLE chunks` + indexes) runs idempotently at app startup. Ingestion (embedding + writing to `chunks`) is a separate pipeline, out of scope here. |
+| **Auth** | Aurora master credentials live in Secrets Manager at `slack-knowledge-bot/<env>/db-credentials`; the External Secrets Operator syncs them into a k8s Secret and the chart's Deployment injects them as `PGUSER` / `PGPASSWORD`. The Aurora security group allows ingress only from the cluster node SG on 5432. No public ingress. |
+| **Env vars** | `RETRIEVAL_BACKEND_URL` (takes precedence) OR the individual `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` fields (host/port/db from chart values; `PGUSER`/`PGPASSWORD` from the ESO-synced `db-credentials` Secret). Empty → null backend (retriever returns empty hits). |
+| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions Aurora Serverless v2 (pgvector) in the private subnet. Schema bootstrap (`CREATE EXTENSION vector` + `CREATE TABLE chunks` + indexes) runs idempotently at app startup. Ingestion (embedding + writing to `chunks`) is a separate pipeline, out of scope here. |
 | **Verify** | `npm test -- --grep "retriever\|pgvector\|null"` (backend port shape, pgvector SQL parameterisation, null fallback, retriever fusion) |
 | **Swap to** | OpenSearch, Qdrant, Pinecone, or a local stub — write a new adapter implementing `RetrievalBackend`, wire it in `src/index.ts` by extending the URL-scheme dispatcher. |
 
@@ -106,12 +106,12 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 
 | | |
 |---|---|
-| **What it does** | Shared-state sliding-window rate limiter (per-user + per-workspace). Multi-instance ECS requires shared state; in-memory Maps would multiply the limit by instance count. Fails open if Redis is unreachable. |
+| **What it does** | Shared-state sliding-window rate limiter (per-user + per-workspace). Multiple pod replicas require shared state; in-memory Maps would multiply the limit by replica count. Fails open if Redis is unreachable. |
 | **Port** | `RateLimiterRedisPort` (`src/ratelimit/redis-limiter.ts`) — narrow interface: `pipeline()` returning sorted-set operations. |
 | **Factory** | `createRateLimiter({redis, userPerHour, workspacePerHour})` |
 | **Auth** | VPC + TLS (`rediss://`), `rejectUnauthorized: true`. No API key. |
 | **Env vars** | `REDIS_URL` (the `rediss://` endpoint) |
-| **Setup** | CDK stack creates the ElastiCache cluster. No manual setup needed beyond deploy. |
+| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions the ElastiCache cluster. No manual setup needed. |
 | **Verify** | `npm test -- --grep redis-limiter` (under-limit/blocked/fail-open paths) |
 
 ---
@@ -120,11 +120,11 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 
 | | |
 |---|---|
-| **What it does** | At-least-once delivery for audit events (query + revocation). Primary queue → DLQ on failure → `AuditTotalLoss` metric if both fail. A Lambda consumer drains the queue into DDB (hot, 90d TTL) + S3 (archive, 1yr). |
+| **What it does** | At-least-once delivery for audit events (query + revocation). Primary queue → DLQ on failure → `AuditTotalLoss` metric if both fail. The audit-consumer Deployment (`node dist/bin/audit-consumer.js`, KEDA-scaled 0..5 replicas on SQS queue depth) drains the queue into DDB (hot, 90d TTL) + S3 (archive, 1yr). |
 | **Port** | `SQSClient` (AWS SDK v3) via `createAuditLogger({sqs, queueUrl, dlqUrl, …})` |
-| **Auth** | IAM — task role has `sqs:SendMessage` on the specific queue ARNs. |
+| **Auth** | IRSA — the pod's `slack-knowledge-bot-platform` role has `sqs:SendMessage` (producer) and `sqs:ReceiveMessage`/`DeleteMessage` (consumer) on the specific queue ARNs. |
 | **Env vars** | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` |
-| **Setup** | CDK stack creates the queues + Lambda consumer. No manual setup. |
+| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions the queues + DLQ; the chart runs the audit-consumer Deployment and its KEDA ScaledObject (`aws-sqs-queue` trigger). No manual setup. |
 | **Verify** | `npm test -- --grep audit-logger` (primary → DLQ → total-loss fallover) |
 
 ---
@@ -138,7 +138,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | Notion | `ConnectorVerifier` | Per-user OAuth | `NOTION_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Confluence | `ConnectorVerifier` | Per-user OAuth | `CONFLUENCE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Google Drive | `ConnectorVerifier` | Per-user OAuth | `GOOGLE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
-| Bedrock | `BedrockRuntimeClient` | IAM | `BEDROCK_REGION`, `BEDROCK_LLM_MODEL_ID`, `BEDROCK_EMBEDDING_MODEL_ID` | Yes — pass a different LLM client |
-| Retrieval (pgvector) | `RetrievalBackend` | RDS + Secrets Manager | `RETRIEVAL_BACKEND_URL` or `PG*` fields | Yes — any implementation of the two-method port |
+| Bedrock | `BedrockRuntimeClient` | IRSA | `BEDROCK_REGION`, `BEDROCK_LLM_MODEL_ID`, `BEDROCK_EMBEDDING_MODEL_ID` | Yes — pass a different LLM client |
+| Retrieval (pgvector) | `RetrievalBackend` | Aurora + ESO-synced creds | `RETRIEVAL_BACKEND_URL` or `PG*` fields | Yes — any implementation of the two-method port |
 | Redis | `RateLimiterRedisPort` | VPC + TLS | `REDIS_URL` | Yes — any sorted-set-shaped backend |
-| SQS | `SQSClient` | IAM | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` | Yes — pass a different queue client |
+| SQS | `SQSClient` | IRSA | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` | Yes — pass a different queue client |

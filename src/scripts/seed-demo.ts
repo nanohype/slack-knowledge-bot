@@ -14,7 +14,23 @@
  * source systems + chunks real content — out of scope here.
  */
 import { Pool } from "pg";
+import { readFileSync } from "node:fs";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+
+// Mirror src/index.ts: verify the RDS server cert against the bundled global CA
+// by default; PG_SSL_REJECT_UNAUTHORIZED=false relaxes it for local Postgres.
+function buildSeederSsl(): false | { ca?: string; rejectUnauthorized: boolean } {
+  if (process.env.PG_SSL_REJECT_UNAUTHORIZED === "false") {
+    return { rejectUnauthorized: false };
+  }
+  const caPath = process.env.PG_SSL_CA_PATH ?? "certs/rds-global-bundle.pem";
+  try {
+    return { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true };
+  } catch {
+    console.error(`[seed] CA bundle ${caPath} unreadable; using encrypted-but-unverified TLS`);
+    return { rejectUnauthorized: false };
+  }
+}
 
 interface SeedDoc {
   docId: string;
@@ -109,6 +125,7 @@ async function embed(
       contentType: "application/json",
       accept: "application/json",
     }),
+    { abortSignal: AbortSignal.timeout(5000) },
   );
   const parsed = JSON.parse(new TextDecoder().decode(res.body)) as {
     embedding: number[];
@@ -138,8 +155,10 @@ async function main(): Promise<void> {
     port: Number(process.env.PGPORT ?? 5432),
     user,
     password,
-    database: process.env.PGDATABASE ?? "slack-knowledge-bot",
-    ssl: { rejectUnauthorized: false },
+    database: process.env.PGDATABASE ?? "slack_knowledge_bot",
+    ssl: buildSeederSsl(),
+    statement_timeout: 10_000,
+    connectionTimeoutMillis: 2_000,
     max: 2,
   });
 
@@ -148,15 +167,24 @@ async function main(): Promise<void> {
     const vector = await embed(bedrock, modelId, `${doc.title}\n${doc.chunkText}`);
     const literal = `[${vector.join(",")}]`;
     await pool.query(
-      `INSERT INTO chunks (doc_id, source, source_url, title, chunk_text, last_modified, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7::vector)
-       ON CONFLICT (doc_id) DO UPDATE SET
+      `INSERT INTO chunks (doc_id, chunk_index, source, source_url, title, chunk_text, last_modified, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8::vector)
+       ON CONFLICT (doc_id, chunk_index) DO UPDATE SET
          source_url = EXCLUDED.source_url,
          title = EXCLUDED.title,
          chunk_text = EXCLUDED.chunk_text,
          last_modified = EXCLUDED.last_modified,
          embedding = EXCLUDED.embedding`,
-      [doc.docId, doc.source, doc.sourceUrl, doc.title, doc.chunkText, doc.lastModified, literal],
+      [
+        doc.docId,
+        0,
+        doc.source,
+        doc.sourceUrl,
+        doc.title,
+        doc.chunkText,
+        doc.lastModified,
+        literal,
+      ],
     );
     console.error(`[seed] upserted ${doc.docId}`);
   }

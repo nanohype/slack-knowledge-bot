@@ -50,6 +50,7 @@ const s3 = new S3Client({
 });
 
 let stopping = false;
+let loopExited = false;
 
 const server = http.createServer((req, res) => {
   if (req.url === "/health" || req.url === "/healthz" || req.url === "/readyz") {
@@ -69,17 +70,20 @@ server.listen(PORT, () => {
 const shutdown = (signal: string): void => {
   logger.info({ signal }, "audit-consumer: shutting down");
   stopping = true;
-  // Give the loop ~30s to drain in-flight messages. The chart's
-  // terminationGracePeriodSeconds is 45s, leaving buffer for the http
-  // server close + the SDK clients' destructors.
+  // Exit as soon as the receive loop drains — it sees stopping=true once the
+  // current long-poll returns (≤20s) and resolves, setting loopExited. The 30s
+  // deadline is only a backstop for a hung loop; the chart's
+  // terminationGracePeriodSeconds (45s) leaves buffer for the close.
   const deadline = Date.now() + 30_000;
   const drain = setInterval(() => {
-    if (Date.now() >= deadline) {
+    if (loopExited || Date.now() >= deadline) {
       clearInterval(drain);
-      server.close(() => process.exit(0));
-      setTimeout(() => process.exit(1), 5_000).unref();
+      server.close();
+      process.exit(0);
     }
-  }, 1_000);
+  }, 500);
+  // Hard backstop in case server.close stalls on a keep-alive probe connection.
+  setTimeout(() => process.exit(1), 35_000).unref();
 };
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -97,5 +101,7 @@ await runAuditConsumer({
   onProcessed: (outcome) => counter("AuditConsumerProcessed", 1, { outcome }),
 });
 
+loopExited = true;
 logger.info("audit-consumer: loop exited, closing http server");
-server.close(() => process.exit(0));
+server.close();
+process.exit(0);

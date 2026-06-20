@@ -1,7 +1,7 @@
 # SlackKnowledgeBot QA Playbook — Fresh Deploy to First Grounded Answer
 
 **Audience:** operator/QA engineer validating a clean SlackKnowledgeBot deploy end-to-end.
-**Time:** ~45 minutes, most of it waiting on CDK + OAuth consent screens.
+**Time:** ~45 minutes, most of it waiting on the ArgoCD sync + OAuth consent screens.
 **Outcome:** `@yourbot what's our PTO policy?` returns a Claude-generated answer grounded in a real Notion page, with a clickable citation.
 
 This doc is operator-first: paste-ready commands, exact console click-paths, zero narrative filler. Each step tells you what to do, how to verify it worked, and — in Appendix B — what can go wrong. If a command fails with an error you don't recognise, **scan Appendix B first**; every non-obvious failure we've seen during this project is catalogued there.
@@ -12,85 +12,85 @@ This doc is operator-first: paste-ready commands, exact console click-paths, zer
 
 | Thing | Why |
 |---|---|
-| AWS account with admin | CDK bootstrap, Bedrock Marketplace subscribe, secrets seeding |
+| AWS account with admin | Apply the Platform CR, Bedrock Marketplace subscribe, secrets seeding |
 | AWS CLI + SSO profile | `aws sso login --profile <name>` |
-| Node 24 + npm | Matches the Docker base image and Lambda runtime |
-| Docker (running) | CDK builds the ECS image as a local asset |
-| Session Manager plugin | For `aws ecs execute-command` — `brew install --cask session-manager-plugin` |
+| `kubectl` + cluster access | Apply `platform.yaml`, exec into pods, read logs |
+| `argocd` CLI (optional) | Inspect ArgoCD app sync/health from the terminal |
+| Node 24 + npm | Matches the Docker base image and CI runtime |
 | Slack workspace admin | To create the bot app, enable Socket Mode, install |
-| A public domain you own | ACM cert + Route 53 alias; OAuth providers reject non-HTTPS callbacks |
+| A public domain you own | cert-manager TLS + DNS for the ingress; OAuth providers reject non-HTTPS callbacks |
 | Gmail (or any email) | WorkOS Directory Sync signup |
 
-Set the AWS profile + region for everything that follows:
+Set the AWS profile + region for everything that follows, and point `kubectl` at the target cluster:
 
 ```bash
 export AWS_PROFILE=<your-sso-profile>
 export AWS_REGION=us-west-2
 aws sts get-caller-identity   # sanity
+kubectl config current-context   # confirm you're on the right cluster
 ```
 
 ---
 
-## 2. Deploy the stack (15 min)
+## 2. Deploy the tenant (15 min)
+
+The app ships as a Platform tenant of the `protohype` team on the `eks-agent-platform` operator. There's no in-repo IaC and no manual rollout — the substrate is OpenTofu/Terragrunt in `landing-zone`, and ArgoCD reconciles the Helm chart (`chart/`) from git. Three moving parts: the substrate, the Platform CR, and the ApplicationSet entry.
 
 ```bash
-git clone <repo> && cd protohype/slack-knowledge-bot
-npm run install:all
+git clone <repo> && cd slack-knowledge-bot
+npm ci && npm run build:oauth
 ```
 
-Pick a subdomain you'll use for the ALB. Assuming your Route 53 zone is `example.com` and you want staging at `slack-knowledge-bot.example.com`:
+### 2a. Substrate (landing-zone)
+
+`landing-zone/components/aws/slack-knowledge-bot-platform/` provisions the shared AWS state: DynamoDB ×3 (tokens, audit, identity cache), SQS + DLQ, the S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, the KMS token key, and the seeded `slack-knowledge-bot/staging/app-secrets`. Apply its staging entry per that repo's `CLAUDE.md`, then grab the outputs you'll plumb into the chart:
 
 ```bash
-export SLACK_KNOWLEDGE_BOT_STAGING_DOMAIN=slack-knowledge-bot.example.com
-export SLACK_KNOWLEDGE_BOT_STAGING_HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
-  --dns-name example.com \
-  --query 'HostedZones[0].Id' --output text | awk -F/ '{print $NF}')
-echo "zone=$SLACK_KNOWLEDGE_BOT_STAGING_HOSTED_ZONE_ID"
+# from landing-zone, in the component's terragrunt dir
+terragrunt output irsa_role_arn      # → drops into chart/values-staging.yaml aws.platformRoleArn
+terragrunt output pg_host            # → tenantInfra.pgHost
 ```
 
-One-time CDK bootstrap:
+These outputs are wired into `chart/values-staging.yaml` under `aws.platformRoleArn` + `tenantInfra.*`. See `docs/secrets.md` for the secret payload shape.
+
+### 2b. Platform CR
+
+Apply the Platform CR once. The operator reconciles the namespace, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, the IRSA role, KMS grants, and the S3 bucket policy:
 
 ```bash
-cd infra && npx cdk bootstrap aws://$(aws sts get-caller-identity --query Account --output text)/us-west-2 && cd ..
+kubectl apply -f platform.yaml
+kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
+  -n tenants-protohype --timeout=300s
 ```
 
-Deploy:
+### 2c. GitOps
 
-```bash
-npm run deploy:staging
-```
+`gitops/applicationset-entry.yaml` is registered in `nanohype/eks-gitops` (`applicationsets/apps-tenants.yaml`). ArgoCD renders the chart per cluster/env and rolls out the main `Deployment`, the `Ingress` (ingress-nginx + cert-manager TLS for `/health` + `/oauth/:provider/{start,callback}`), and the KEDA-scaled audit-consumer `Deployment`. New image tags flow: release workflow → GHCR → ArgoCD auto-syncs.
 
-This runs install → build:oauth → typecheck → lint → format:check → test → npm audit → `cdk deploy SlackKnowledgeBotStaging` → smoke. CDK provisions (≈10 min on a cold account):
-
-- VPC + NAT gateway + private subnets
-- ECS Fargate cluster + service + task definition
-- Internet-facing ALB + ACM cert (DNS-validated) + Route 53 alias
-- RDS Postgres (pgvector) `db.t4g.micro` + security group
-- ElastiCache Redis (TLS-enabled)
-- DynamoDB ×3 (tokens, audit, identity cache)
-- SQS + FIFO DLQ + Lambda audit consumer
-- S3 audit archive + KMS CMK + Secrets Manager entries
-- CloudWatch alarms + dashboard
+The ingress hostname is whatever `chart/values-staging.yaml` sets under `ingress.hosts[0].host` (e.g. `slack-knowledge-bot-staging.example.com`); cert-manager issues its TLS cert. That hostname is `APP_BASE_URL` for the env.
 
 **Verify:**
 
 ```bash
-curl -s "https://${SLACK_KNOWLEDGE_BOT_STAGING_DOMAIN}/health"
-# → {"status":"ok","service":"slack-knowledge-bot"}
+# Pods up + rollout complete
+kubectl -n tenants-protohype get pods -l app.kubernetes.io/name=slack-knowledge-bot
+kubectl -n tenants-protohype rollout status deploy/slack-knowledge-bot
 
-aws cloudformation describe-stacks --stack-name SlackKnowledgeBotStaging \
-  --query 'Stacks[0].{status:StackStatus,url:Outputs[?OutputKey==`ServiceUrl`].OutputValue}' \
-  --output json
-# → {"status":"CREATE_COMPLETE","url":["https://slack-knowledge-bot.example.com"]}
+# ArgoCD app synced + healthy (optional CLI)
+argocd app get slack-knowledge-bot-staging
+
+# Health endpoint via the ingress
+curl -s "https://slack-knowledge-bot-staging.example.com/health"
+# → {"status":"ok","service":"slack-knowledge-bot"}
 ```
 
-**Can go wrong:** [B.1 HttpListener port collision on redeploy](#b1-httplistener-port-collision-on-redeploy) • [B.2 Task crashes at boot with Zod validation](#b2-task-crashes-at-boot-with-zod-validation)
+**Can go wrong:** [B.1 Ingress / cert-manager TLS not ready](#b1-ingress--cert-manager-tls-not-ready) • [B.2 Pod crash-loops at boot with Zod validation](#b2-pod-crash-loops-at-boot-with-zod-validation)
 
 ---
 
 ## 3. Enable Bedrock model access (5 min)
 
-The `us.anthropic.claude-sonnet-4-6` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the ECS task role deliberately doesn't have. **Your admin session does.**
+The `us.anthropic.claude-sonnet-4-6` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IRSA role deliberately doesn't have. **Your admin session does.**
 
 For each of us-east-1, us-east-2, us-west-2:
 
@@ -229,7 +229,7 @@ All three need the same callback URL pattern:
 
 ## 7. Seed app-secrets (2 min)
 
-CDK creates the secret `slack-knowledge-bot/staging/app-secrets` with placeholder values on first deploy. Now overwrite it with real values. **Do not include `STATE_SIGNING_SECRET`** — CDK generates that one automatically; reseeding would rotate it and break any in-flight OAuth state cookies.
+The landing-zone `slack-knowledge-bot-platform` component seeds `slack-knowledge-bot/staging/app-secrets` with placeholder values. Now overwrite it with real values. **Do not include `STATE_SIGNING_SECRET`** — the substrate generates that one; reseeding would rotate it and break any in-flight OAuth state cookies.
 
 Write the JSON off-tree:
 
@@ -255,35 +255,31 @@ cat > /tmp/slack-knowledge-bot-staging-secrets.json <<'JSON'
 JSON
 ```
 
-Push it, then roll the ECS service so task-starts resolve the new values:
+Push it. The External Secrets Operator syncs Secrets Manager → the k8s `app-secrets` Secret on its refresh interval; restart the Deployment so pods pick up the new values immediately:
 
 ```bash
 aws secretsmanager put-secret-value \
   --secret-id slack-knowledge-bot/staging/app-secrets \
   --secret-string file:///tmp/slack-knowledge-bot-staging-secrets.json
 
-aws ecs update-service \
-  --cluster slack-knowledge-bot-staging \
-  --service slack-knowledge-bot-staging \
-  --force-new-deployment
-
-aws ecs wait services-stable \
-  --cluster slack-knowledge-bot-staging \
-  --services slack-knowledge-bot-staging
+# Force ESO to resync now (optional — it polls on its own), then roll the pods
+kubectl -n tenants-protohype annotate externalsecret slack-knowledge-bot \
+  force-sync="$(date +%s)" --overwrite
+kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot
+kubectl -n tenants-protohype rollout status deploy/slack-knowledge-bot
 ```
 
-After the wait returns, clean up the file: `rm -P /tmp/slack-knowledge-bot-staging-secrets.json` (macOS) or `shred -u` (Linux).
+After the rollout returns, clean up the file: `rm -P /tmp/slack-knowledge-bot-staging-secrets.json` (macOS) or `shred -u` (Linux).
 
 **Verify:** logs should show Bolt connected, no Zod-validation crash —
 
 ```bash
-LG=$(aws logs describe-log-groups --log-group-name-prefix SlackKnowledgeBotStaging-SlackKnowledgeBotTaskslack-knowledge-bot \
-  --query 'logGroups | sort_by(@, &creationTime) | [-1].logGroupName' --output text)
-aws logs tail "$LG" --since 2m | grep 'SlackKnowledgeBot is running'
+kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --tail=50 \
+  | grep 'SlackKnowledgeBot is running'
 # → {"level":30,"…","msg":"SlackKnowledgeBot is running"}
 ```
 
-**Can go wrong:** [B.2 Task crashes at boot with Zod validation](#b2-task-crashes-at-boot-with-zod-validation)
+**Can go wrong:** [B.2 Pod crash-loops at boot with Zod validation](#b2-pod-crash-loops-at-boot-with-zod-validation)
 
 ---
 
@@ -316,22 +312,21 @@ Edit `src/scripts/seed-demo.ts`. Replace the four `REPLACE_WITH_YOUR_*` placehol
 - `CONFLUENCE_PAGE_ID`
 - `DRIVE_FILE_ID`
 
-Rebuild the image + roll the service so the updated script ships into the container:
+The updated script ships in the next image. Commit + push to `main`; the release workflow builds, scans (Trivy), and publishes the image to GHCR, and ArgoCD auto-syncs the new tag onto the Deployment:
 
 ```bash
-npm run deploy:staging
+git commit -am "demo: plug seed-demo page IDs" && git push
+# wait for the release workflow + ArgoCD sync, then confirm the new pod is up
+kubectl -n tenants-protohype rollout status deploy/slack-knowledge-bot
 ```
 
 ### 8d. Run the seeder
 
-```bash
-TASK=$(aws ecs list-tasks --cluster slack-knowledge-bot-staging --desired-status RUNNING \
-  --query 'taskArns[0]' --output text | awk -F/ '{print $NF}')
+Exec into the running pod and run the seeder there:
 
-aws ecs execute-command \
-  --cluster slack-knowledge-bot-staging --task "$TASK" \
-  --container slack-knowledge-bot --interactive \
-  --command "node dist/scripts/seed-demo.js"
+```bash
+kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- \
+  node dist/scripts/seed-demo.js
 ```
 
 Expected output:
@@ -347,9 +342,8 @@ Expected output:
 **Verify:**
 
 ```bash
-aws ecs execute-command --cluster slack-knowledge-bot-staging --task "$TASK" \
-  --container slack-knowledge-bot --interactive \
-  --command "node -e \"const{Pool}=require('pg');const p=new Pool({host:process.env.PGHOST,port:+process.env.PGPORT,user:process.env.PGUSER,password:process.env.PGPASSWORD,database:process.env.PGDATABASE,ssl:{rejectUnauthorized:false}});p.query('SELECT count(*) FROM chunks').then(r=>console.log('count:',r.rows[0].count)).then(()=>p.end())\""
+kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- \
+  node -e "const{Pool}=require('pg');const p=new Pool({host:process.env.PGHOST,port:+process.env.PGPORT,user:process.env.PGUSER,password:process.env.PGPASSWORD,database:process.env.PGDATABASE,ssl:{rejectUnauthorized:false}});p.query('SELECT count(*) FROM chunks').then(r=>console.log('count:',r.rows[0].count)).then(()=>p.end())"
 # → count: 3
 ```
 
@@ -392,10 +386,11 @@ Negative test (nothing seeded for this topic) — should return "I don't have en
 
 - `@yourbot what's our laptop refresh policy?`
 
-If any query fails, tail the task log with the trace ID from the user-facing error message:
+If any query fails, tail the pod log and grep for the trace ID from the user-facing error message:
 
 ```bash
-aws logs tail "$LG" --since 5m --filter-pattern "<trace-id-from-slack-message>"
+kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --since=5m \
+  | grep "<trace-id-from-slack-message>"
 ```
 
 **Can go wrong:** any entry in Appendix B.
@@ -430,41 +425,41 @@ Q2 2026 priorities for Engineering: (1) Ship the knowledge bot to general availa
 
 Every non-obvious failure we've seen during this project is indexed here. Symptom → root cause → fix.
 
-### B.1 HttpListener port collision on redeploy
+### B.1 Ingress / cert-manager TLS not ready
 
-**Symptom:** CloudFormation fails with
-```
-CREATE_FAILED | AWS::ElasticLoadBalancingV2::Listener | SlackKnowledgeBotAlb/HttpListener
-A listener already exists on this port for this load balancer
-```
+**Symptom:** `curl https://slack-knowledge-bot-staging.example.com/health` fails with a TLS error or connection refused, even though the pod is `Running`.
 
-**Root cause:** CDK branches on `SLACK_KNOWLEDGE_BOT_<ENV>_DOMAIN` + `_HOSTED_ZONE_ID`. When they're set it provisions an HTTPS listener on 443 and a 80→443 redirect (`HttpRedirect`). When they're unset it provisions a single HTTP listener on 80 (`HttpListener`). Running `deploy:staging` without the env vars after previously deploying *with* them makes CDK try to create a new listener on port 80 while the old redirect listener is still there.
+**Root cause:** the ingress-nginx `Ingress` or its cert-manager-issued certificate hasn't finished provisioning. The ACME HTTP-01/DNS-01 challenge can lag a few minutes, and DNS for the host must resolve to the ingress controller's load balancer first.
 
-**Fix:** always export both env vars before `npm run deploy:staging`:
+**Fix:** check the ingress + certificate status, and that DNS points at the ingress controller:
 ```bash
-export SLACK_KNOWLEDGE_BOT_STAGING_DOMAIN=slack-knowledge-bot.example.com
-export SLACK_KNOWLEDGE_BOT_STAGING_HOSTED_ZONE_ID=Z01234…
+kubectl -n tenants-protohype get ingress slack-knowledge-bot
+kubectl -n tenants-protohype get certificate
+kubectl -n tenants-protohype describe certificate slack-knowledge-bot   # look for Ready=True
 ```
-The rollback is non-destructive — the stack reverts to its previous working state.
+If the certificate is stuck, inspect its `CertificateRequest`/`Order`/`Challenge` objects (`kubectl -n tenants-protohype get challenge`). Once `Ready=True` and DNS resolves, the `/health` curl succeeds.
 
 ---
 
-### B.2 Task crashes at boot with Zod validation
+### B.2 Pod crash-loops at boot with Zod validation
 
-**Symptom:** ECS circuit breaker trips, tasks exit code 1 on startup. Task log:
+**Symptom:** the Deployment's pod is `CrashLoopBackOff`, exit code 1 on startup. Pod log:
 ```
 Invalid configuration: { <KEY>: { _errors: [ 'Invalid input: expected string, received undefined' ] } }
 ```
 
-**Root cause:** a required env var or Secrets Manager key isn't reaching the task. Common cases:
-- You pushed code that added a new required env var without also updating `infra/lib/slack-knowledge-bot-stack.ts` task-def secrets/environment
-- `put-secret-value` uploaded a JSON missing a key that the task-def references via `ecs.Secret.fromSecretsManager(…, "KEY")` — ECS refuses to start the task
+**Root cause:** a required env var or Secrets Manager key isn't reaching the pod. Common cases:
+- You pushed code that added a new required env var without also wiring it into `chart/templates/deployment.yaml` (env from chart values) or `chart/templates/externalsecret.yaml` (key from the ESO-synced Secret)
+- `put-secret-value` uploaded a JSON missing a key that the ExternalSecret maps into `app-secrets` — the pod env never gets it
 - Tokens rotated (Slack reinstall) and the old JSON was reseeded verbatim
 
-**Fix:** cross-reference the `Invalid configuration: { <KEY>: … }` key against `src/config/index.ts` to confirm it's required, then verify the key is present in both the task definition and the secret payload:
+**Fix:** cross-reference the `Invalid configuration: { <KEY>: … }` key against `src/config/index.ts` to confirm it's required, then verify the key is present in the secret payload and that ESO synced it into the k8s Secret:
 ```bash
 aws secretsmanager get-secret-value --secret-id slack-knowledge-bot/staging/app-secrets \
   --query 'SecretString' --output text | jq 'keys'
+
+kubectl -n tenants-protohype get secret app-secrets -o jsonpath='{.data}' | jq 'keys'
+kubectl -n tenants-protohype describe externalsecret slack-knowledge-bot   # SecretSynced status
 ```
 
 ---
@@ -476,7 +471,7 @@ aws secretsmanager get-secret-value --secret-id slack-knowledge-bot/staging/app-
 AccessDeniedException: … aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe … to enable access to this model.
 ```
 
-**Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The ECS task role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
+**Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The pod's IRSA role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
 
 **Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 4.6 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted.
 
@@ -491,7 +486,7 @@ ValidationException: Invocation of model ID anthropic.claude-sonnet-4-6 with on-
 
 **Root cause:** Claude Sonnet 4.6 is only reachable via a cross-region inference profile; the bare foundation-model ID doesn't work.
 
-**Fix:** `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-4-6`. This is already the default in `src/config/index.ts` — if you see this error, check the task's env for an override and remove it.
+**Fix:** `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-4-6`. This is already the default in `src/config/index.ts` — if you see this error, check the pod's env for an override (`kubectl -n tenants-protohype exec deploy/slack-knowledge-bot -- printenv BEDROCK_LLM_MODEL_ID`) and remove it from chart values.
 
 ---
 
@@ -502,9 +497,9 @@ ValidationException: Invocation of model ID anthropic.claude-sonnet-4-6 with on-
 WorkOS /directory_users 422 … url:"https://api.workos.com/directory_users?directory=&limit=100"
 ```
 
-**Root cause:** `WORKOS_DIRECTORY_ID` was injected as an empty string. In earlier versions of this stack CDK read it from `process.env.WORKOS_DIRECTORY_ID` at synth time — if the operator's shell didn't export it, CDK baked in `""`. This was fixed: `WORKOS_DIRECTORY_ID` now lives in Secrets Manager (`slack-knowledge-bot/{env}/app-secrets`).
+**Root cause:** `WORKOS_DIRECTORY_ID` reached the pod as an empty string. It lives in Secrets Manager (`slack-knowledge-bot/{env}/app-secrets`) and flows through ESO → the `app-secrets` k8s Secret → pod env. A missing or blank key in the secret payload injects `""`.
 
-**Fix:** add `"WORKOS_DIRECTORY_ID": "directory_01…"` to the secrets JSON, re-seed, force-new-deployment.
+**Fix:** add `"WORKOS_DIRECTORY_ID": "directory_01…"` to the secrets JSON, re-seed (`put-secret-value`), then `kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot` so the pod re-reads the resynced Secret.
 
 ---
 
@@ -519,7 +514,7 @@ Task stays up (Bolt start is wrapped in try/catch + unhandledRejection guard) bu
 
 **Root cause:** Adding a scope + clicking "Reinstall your app" in Slack regenerates the **Bot User OAuth Token** (`xoxb-…`) and may regenerate app-level tokens too. The `xoxb-` / `xapp-` in Secrets Manager is now stale.
 
-**Fix:** re-copy both tokens from the Slack app config (OAuth & Permissions → Bot User OAuth Token; Basic Information → App-Level Tokens), update `/tmp/slack-knowledge-bot-staging-secrets.json`, `put-secret-value`, `force-new-deployment`.
+**Fix:** re-copy both tokens from the Slack app config (OAuth & Permissions → Bot User OAuth Token; Basic Information → App-Level Tokens), update `/tmp/slack-knowledge-bot-staging-secrets.json`, `put-secret-value`, then `kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot`.
 
 **Diagnostic:** curl Slack directly to verify which token is bad —
 ```bash
@@ -589,9 +584,9 @@ callback provider error, provider:"notion", status:401
 DatabaseError: no pg_hba.conf entry for host "10.0.x.x", user "slack_knowledge_bot_admin", database "slack_knowledge_bot", no encryption
 ```
 
-**Root cause:** RDS Postgres enforces TLS by default (`rds.force_ssl=1`). A `pg` Pool without `ssl: { rejectUnauthorized: false }` connects plaintext and gets rejected.
+**Root cause:** RDS Postgres enforces TLS by default (`rds.force_ssl=1`). A `pg` Pool with no `ssl` config connects plaintext and gets rejected.
 
-**Fix:** already fixed in `src/index.ts` — Pool ctor includes `ssl: { rejectUnauthorized: false }`. If you see this after a code change, check `buildRetrievalBackend` in `src/index.ts`.
+**Fix:** already handled in `src/index.ts` — `buildPgSsl()` builds the Pool's `ssl` config, defaulting to TLS verified against the bundled RDS global CA (`PG_SSL_REJECT_UNAUTHORIZED=true`, `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`). If the cert chain can't be validated (e.g. a local Postgres with no trusted chain), set `PG_SSL_REJECT_UNAUTHORIZED=false` to fall back to encrypted-but-unverified. If you see this after a code change, check `buildPgSsl`/`buildRetrievalBackend` in `src/index.ts`.
 
 ---
 
@@ -648,9 +643,8 @@ AclProbeError: confluence probe 401
 
 **Fix:** check whether the stored grant has a refresh token:
 ```bash
-TASK=…
-aws ecs execute-command --cluster slack-knowledge-bot-staging --task "$TASK" --container slack-knowledge-bot --interactive \
-  --command "node -e \"const{DDBKmsTokenStorage}=require('slack-knowledge-bot-oauth');const s=new DDBKmsTokenStorage({tableName:process.env.DYNAMODB_TABLE_TOKENS,keyId:process.env.KMS_KEY_ID,region:process.env.AWS_REGION});s.get('<externalUserId>','atlassian').then(g=>console.log(JSON.stringify({hasAccess:!!g?.accessToken,hasRefresh:!!g?.refreshToken,expiresAt:g?.expiresAt?new Date(g.expiresAt*1000).toISOString():null})))\""
+kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- \
+  node -e "const{DDBKmsTokenStorage}=require('slack-knowledge-bot-oauth');const s=new DDBKmsTokenStorage({tableName:process.env.DYNAMODB_TABLE_TOKENS,keyId:process.env.KMS_KEY_ID,region:process.env.AWS_REGION});s.get('<externalUserId>','atlassian').then(g=>console.log(JSON.stringify({hasAccess:!!g?.accessToken,hasRefresh:!!g?.refreshToken,expiresAt:g?.expiresAt?new Date(g.expiresAt*1000).toISOString():null})))"
 ```
 If `hasRefresh` is `false`, delete the row and re-OAuth (trigger with a fresh @mention).
 
@@ -683,16 +677,17 @@ Reason: MessageDeduplicationId can only include alphanumeric and punctuation cha
 
 ---
 
-### B.18 Session Manager plugin missing
+### B.18 kubectl exec forbidden
 
-**Symptom:** `aws ecs execute-command` exits with:
+**Symptom:** `kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- …` exits with:
 ```
-SessionManagerPlugin is not found. Please refer to SessionManager Documentation here
+Error from server (Forbidden): pods "slack-knowledge-bot-…" is forbidden:
+User "…" cannot create resource "pods/exec" in API group "" in the namespace "tenants-protohype"
 ```
 
-**Root cause:** The ECS Exec API returns a WebSocket URL that the CLI tunnels through a local plugin binary.
+**Root cause:** your kube context maps to a role that lacks `pods/exec` in the tenant namespace. The Platform's RBAC scopes who can shell into tenant pods.
 
-**Fix:** `brew install --cask session-manager-plugin` (macOS) or the `.deb` / `.rpm` from [AWS docs](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) (Linux). Then retry.
+**Fix:** authenticate with a context that has exec rights in `tenants-protohype` (check `kubectl auth can-i create pods/exec -n tenants-protohype`). If you only need read-only data, `kubectl logs` and the AWS CLI (`aws dynamodb …`) don't require exec.
 
 ---
 

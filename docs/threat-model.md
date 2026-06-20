@@ -50,7 +50,7 @@
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
 | **Cross-space ACL leak** | User A retrieves User B's private doc | ACL verified per-user at query time via source OAuth; fail-secure on any error | ✅ Implemented |
-| **LLM training data exposure** | Source content in Bedrock logs | Bedrock on-account; no model training on customer data; `X-Amzn-Bedrock-Save-Embeddings: false` header | ✅ Required — verify in deployment |
+| **LLM training data exposure** | Source content in Bedrock logs | Bedrock on-account; no model training on customer data; model-invocation logging governed at the landing-zone account/region level | ✅ Required — verify at the account/region level |
 | PII in audit log | Raw query stored | PII scrubber applied before audit; `scrubbed_query` stored not `raw_query_text` | ✅ Implemented |
 | Token exposure in logs | OAuth tokens logged | `logger.ts` never logs token values; DDB payloads always encrypted before log | ✅ Implemented |
 | Retrieval backend exposure | DB readable without auth | Aurora security group allows ingress from the cluster node SG only; DB is not publicly accessible; egress allow-list on the pod NetworkPolicy | ✅ Implemented |
@@ -196,15 +196,9 @@ Then: Query 21 (to either replica) is blocked
 ```
 
 ### FINDING-02: Bedrock Logging Opt-Out Not Enforced (HIGH)
-**Finding:** Bedrock model invocations may be logged by default. Source content must not appear in Bedrock logs.
+**Finding:** Bedrock model-invocation logging can capture prompt + completion bodies. Source content must not land in Bedrock invocation logs (CloudWatch / S3).
 
-**Remediation:** Set `X-Amzn-Bedrock-Save-Embeddings: false` header and disable Bedrock model invocation logging in account settings (owned by landing-zone at the account/region level, not per-tenant).
-
-```typescript
-// In generator.ts, add to InvokeModelCommand
-customUserAgent: "slack-knowledge-bot/1.0",
-// Account-level: Bedrock invocation logging is disabled in landing-zone
-```
+**Remediation:** Bedrock model-invocation logging is an account/region-level setting (`PutModelInvocationLoggingConfiguration`), not something the app or this chart controls — there is no request header that toggles it. It is governed by landing-zone at the account/region level (an org/substrate concern). Verify the desired posture (logging disabled, or routed to a controlled, access-restricted target) in the AWS account hosting Bedrock for each inference region; confirm the app's IRSA role cannot change it.
 
 ### FINDING-03: Redis TLS Required (MEDIUM)
 **Finding:** transit encryption is enabled on the ElastiCache group in landing-zone, but the `ioredis` connection must also enable TLS.

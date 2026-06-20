@@ -199,8 +199,15 @@ env:
   # Non-secret configuration. Secrets come through the ExternalSecret.
   AWS_REGION: us-west-2
   BEDROCK_REGION: us-west-2
-  BEDROCK_LLM_MODEL_ID: anthropic.claude-sonnet-4-6
+  # Claude Sonnet 4.6 is reachable only via the cross-region inference profile
+  # (us.anthropic.…); the bare ID returns "on-demand throughput isn't supported".
+  # Must match the Zod default in src/config/index.ts.
+  BEDROCK_LLM_MODEL_ID: us.anthropic.claude-sonnet-4-6
   BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+  # Verify the Aurora server cert against the RDS global CA baked into the image
+  # (certs/rds-global-bundle.pem). Authenticated-encrypted DB link, not just
+  # encrypted. Override to "false" only for a chain-less local Postgres.
+  PG_SSL_REJECT_UNAUTHORIZED: "true"
   RATE_LIMIT_USER_PER_HOUR: "20"
   RATE_LIMIT_WORKSPACE_PER_HOUR: "500"
   STALE_DOC_THRESHOLD_DAYS: "90"

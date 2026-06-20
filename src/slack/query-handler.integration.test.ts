@@ -12,7 +12,7 @@ import { mockClient } from "aws-sdk-client-mock";
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import type { SayFn, AllMiddlewareArgs } from "@slack/bolt";
+import type { App, SayFn, AllMiddlewareArgs } from "@slack/bolt";
 import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
 import { createRateLimiter } from "../ratelimit/redis-limiter.js";
 import { createWorkOSResolver } from "../identity/workos-resolver.js";
@@ -370,7 +370,8 @@ describe("query pipeline integration", () => {
 
     const probeFetch = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("api.notion.com")) return jsonResponse({ ok: true }, { status: 200 });
+      if (new URL(url).hostname === "api.notion.com")
+        return jsonResponse({ ok: true }, { status: 200 });
       return jsonResponse({}, { status: 403 });
     }) as unknown as typeof fetch;
 
@@ -406,5 +407,83 @@ describe("query pipeline integration", () => {
     const body = JSON.stringify(calls[0]);
     expect(body).toMatch(/couldn't access|redacted|not accessible/i);
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
+  });
+});
+
+describe("query handler lifecycle (registration + graceful drain)", () => {
+  beforeEach(() => {
+    ddbMock.reset();
+    bedrockMock.reset();
+    sqsMock.reset();
+  });
+
+  // Capture the listeners registerWith() hands to Bolt so we can drive them
+  // directly — the same wrappers that feed the in-flight set.
+  function captureListeners(handler: ReturnType<typeof buildDeps>["handler"]) {
+    let mention: ((args: unknown) => Promise<void>) | undefined;
+    let message: ((args: unknown) => Promise<void>) | undefined;
+    const app = {
+      event: (_evt: string, fn: (args: unknown) => Promise<void>) => {
+        mention = fn;
+      },
+      message: (fn: (args: unknown) => Promise<void>) => {
+        message = fn;
+      },
+    } as unknown as App;
+    handler.registerWith(app);
+    return {
+      mention: (args: unknown) => mention!(args),
+      message: (args: unknown) => message!(args),
+    };
+  }
+
+  it("drainInFlight resolves immediately when nothing is in flight", async () => {
+    const { handler } = buildDeps({});
+    await expect(handler.drainInFlight(1000)).resolves.toBeUndefined();
+  });
+
+  it("tracks an in-flight app_mention and drainInFlight returns at the deadline instead of hanging", async () => {
+    const { handler } = buildDeps({});
+    const { mention } = captureListeners(handler);
+
+    // users.info blocks until released → the query hangs mid-pipeline, so it
+    // stays in the in-flight set across the drain.
+    let releaseInfo: (v: unknown) => void = () => {};
+    const infoGate = new Promise((res) => {
+      releaseInfo = res;
+    });
+    const hangingClient = { users: { info: () => infoGate } } as unknown as BoltClient;
+    const { say } = makeSay();
+
+    const handled = mention({
+      event: { user: "U1", text: "<@BOT> hi", ts: "t1", channel: "C1" },
+      say,
+      client: hangingClient,
+    });
+    await new Promise((r) => setImmediate(r)); // let it enter the in-flight set
+
+    const t0 = Date.now();
+    await handler.drainInFlight(40);
+    expect(Date.now() - t0).toBeLessThan(1500); // bounded by the deadline, not hung on the query
+
+    // Release so the tracked query finishes (null email → profile error reply)
+    // and nothing dangles past the test.
+    releaseInfo({ user: { profile: { email: null } } });
+    await handled;
+  });
+
+  it("tracks an in-flight DM message and drains cleanly once it completes", async () => {
+    const { handler } = buildDeps({});
+    const { message } = captureListeners(handler);
+    const { say } = makeSay();
+
+    // No Slack email → the pipeline replies with the profile-email error and
+    // completes quickly, draining the in-flight entry.
+    await message({
+      message: { channel_type: "im", text: "hi", user: "U1", channel: "C1", ts: "t1" },
+      say,
+      client: fakeBoltClient(null),
+    });
+    await expect(handler.drainInFlight(1000)).resolves.toBeUndefined();
   });
 });

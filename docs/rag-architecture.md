@@ -11,7 +11,7 @@
 │                           SLACK_KNOWLEDGE_BOT QUERY PIPELINE                            │
 │                                                                             │
 │  Slack Event ──► Slack Gateway ──► Identity Resolver ──► ACL Guard         │
-│                      (ECS)            (WorkOS Directory)        (per-user OAuth)  │
+│                   (EKS pod)           (WorkOS Directory)        (per-user OAuth)  │
 │                                                                  │          │
 │                                           ┌──────────────────────┘          │
 │                                           ▼                                 │
@@ -75,7 +75,7 @@
 │                      ┌──────────────┤                                       │
 │                      ▼              ▼                                       │
 │               Slack Response    Audit Log                                   │
-│                                 (SQS → Lambda → DDB → S3)                  │
+│              (SQS → audit-consumer Deployment (KEDA) → DDB + S3)            │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

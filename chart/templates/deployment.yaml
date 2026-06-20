@@ -25,6 +25,10 @@ spec:
         checksum/external-secret: {{ printf "%s-%s" .Values.externalSecret.remoteRefSecret .Values.externalSecret.refreshInterval | sha256sum }}
     spec:
       serviceAccountName: {{ include "tenant-chart-base.serviceAccountName" . }}
+      # Above the app's SHUTDOWN_DRAIN_MS (25s) plus app.stop()/flush/close
+      # slack, so SIGTERM can drain in-flight queries (and their awaited audit
+      # writes) before the kubelet SIGKILLs the pod.
+      terminationGracePeriodSeconds: 45
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:

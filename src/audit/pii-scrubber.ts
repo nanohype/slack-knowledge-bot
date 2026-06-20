@@ -39,7 +39,7 @@ const SCRUB_PATTERNS: ScrubPattern[] = [
   },
   {
     label: "email",
-    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
     replacement: "[EMAIL]",
   },
   {
@@ -74,19 +74,6 @@ export function scrubPii(text: string): string {
   let scrubbed = text;
   for (const { pattern, replacement } of SCRUB_PATTERNS) {
     scrubbed = scrubbed.replace(pattern, replacement);
-  }
-  return scrubbed;
-}
-
-export function scrubPiiFromObject<T extends Record<string, unknown>>(
-  obj: T,
-  fields: (keyof T)[],
-): T {
-  const scrubbed = { ...obj };
-  for (const field of fields) {
-    if (typeof scrubbed[field] === "string") {
-      (scrubbed as Record<string, unknown>)[field as string] = scrubPii(scrubbed[field] as string);
-    }
   }
   return scrubbed;
 }
