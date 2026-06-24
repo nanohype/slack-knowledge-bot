@@ -115,14 +115,14 @@ export function createGenerator(deps: GeneratorConfig): Generator {
           }),
           { abortSignal: AbortSignal.timeout(LLM_TIMEOUT_MS) },
         );
-        timing("LLMLatency", now() - llmStart);
+        timing("llm.latency_ms", now() - llmStart);
         const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
         const parsed = CompletionResponseSchema.parse(raw);
         const usage = parsed.usage;
-        if (usage?.input_tokens != null) counter("LLMInputTokens", usage.input_tokens);
-        if (usage?.output_tokens != null) counter("LLMOutputTokens", usage.output_tokens);
+        if (usage?.input_tokens != null) counter("llm.input_tokens", usage.input_tokens);
+        if (usage?.output_tokens != null) counter("llm.output_tokens", usage.output_tokens);
         if (usage?.cache_read_input_tokens != null)
-          counter("LLMCacheReadTokens", usage.cache_read_input_tokens);
+          counter("llm.cache_read_tokens", usage.cache_read_input_tokens);
         const answerText: string = parsed.content[0].text;
         const seen = new Set<string>();
         const citations: SourceCitation[] = accessibleHits
@@ -142,8 +142,8 @@ export function createGenerator(deps: GeneratorConfig): Generator {
           }));
         return { answerText, citations, hasRedactedHits, hasNoHits: false };
       } catch (err) {
-        counter("LLMError");
-        timing("LLMLatency", now() - llmStart);
+        counter("llm.error");
+        timing("llm.latency_ms", now() - llmStart);
         logger.error({ err, question: question.slice(0, 50) }, "Bedrock LLM call failed");
         return {
           answerText: "I'm having trouble generating an answer right now. Please try again.",

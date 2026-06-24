@@ -18,7 +18,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
   - `audit-consumer-deployment.yaml` — long-running SQS consumer (`dist/bin/audit-consumer.js`); drains the audit queue → DynamoDB + S3
   - `audit-consumer-scaledobject.yaml` — KEDA `aws-sqs-queue` trigger scaling the audit-consumer 0..5 replicas off the queue depth, using the pod's IRSA for SQS metrics
   - `prometheusrule.yaml` — four alerts (QueryP95, LLMError, AuditTotalLoss, AuditDlqDepth)
-  - `grafana-dashboard.yaml` — ConfigMap loading the eight-panel dashboard from `dashboards/slack-knowledge-bot.json`
+  - `grafana-dashboard.yaml` — GrafanaDashboard CR (instanceSelector `dashboards: external`) loading the dashboard from `dashboards/slack-knowledge-bot.json`, reconciled by the grafana-operator onto Amazon Managed Grafana
   - `_helpers.tpl` — name/label helpers
 
 ## Relationship to companion files
@@ -78,12 +78,12 @@ This chart owns the app's k8s surface. The cloud substrate and cluster addons si
 
 **Substrate (`landing-zone/components/aws/slack-knowledge-bot-platform/`):** VPC + private subnets, DynamoDB ×3, ElastiCache Redis, Aurora Serverless v2 (pgvector), SQS + DLQ, S3 audit bucket, KMS token-store key, and the seeded Secrets Manager `slack-knowledge-bot/<env>/app-secrets`. Its `irsa_role_arn` output feeds `aws.platformRoleArn` in the per-env values. AWS Secrets Manager stays the source of truth; the chart's `externalsecret.yaml` syncs it into a k8s Secret via ESO.
 
-**Cluster addons (`eks-gitops`):** ingress-nginx, cert-manager + external-dns (fronted by the `ingress` template), the OTel Collector at `otel-collector.observability.svc.cluster.local:4318`, the cluster log forwarder, and Alertmanager. The app writes structured JSON to stderr → cluster log forwarder → Grafana Cloud Loki, and exports OTLP traces + metrics to the cluster collector → Grafana Cloud Tempo + Mimir. No per-pod sidecars.
+**Cluster addons (`eks-gitops`):** ingress-nginx, cert-manager + external-dns (fronted by the `ingress` template), the grafana-agent (Alloy) OTLP receiver at `grafana-agent.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to grafana-agent, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
 
 **This chart:** the main `Deployment`, the KEDA-scaled `audit-consumer-deployment.yaml` (`dist/bin/audit-consumer.js`, 0..5 replicas off SQS audit queue depth — consumer logic in `src/audit/audit-consumer.ts`, port-injected so unit tests fake the SDKs), the `ingress`, the default-deny `networkpolicy.yaml`, the `externalsecret.yaml`, plus observability that ships here rather than in eks-gitops:
 
 - `prometheusrule.yaml` — four alerts: AuditDlqDepth, QueryP95, LLMError, AuditTotalLoss. Alertmanager (eks-gitops) routes them to PagerDuty / Slack.
-- `grafana-dashboard.yaml` — a ConfigMap labeled `grafana_dashboard:"1"` loading the eight-panel dashboard from `chart/dashboards/slack-knowledge-bot.json`; the Grafana sidecar picks it up automatically.
+- `grafana-dashboard.yaml` — a `GrafanaDashboard` CR loading the dashboard from `chart/dashboards/slack-knowledge-bot.json`; the grafana-operator reconciles it onto the external Amazon Managed Grafana.
 
 Bedrock invocation logging is disabled at the account/region level in landing-zone, not per-tenant.
 

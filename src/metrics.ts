@@ -1,9 +1,9 @@
 /**
  * Application metrics via the OTel Metrics API.
  *
- * Exports via OTLP to the cluster OTel Collector
- * (otel-collector.observability.svc.cluster.local:4318), which forwards to
- * Grafana Cloud Mimir. The meter provider is bootstrapped by
+ * Exports via OTLP to the grafana-agent receiver
+ * (grafana-agent.monitoring.svc.cluster.local:4318), which forwards metrics to
+ * Amazon Managed Prometheus. The meter provider is bootstrapped by
  * `@opentelemetry/auto-instrumentations-node/register` (NODE_OPTIONS in the
  * Dockerfile) plus OTEL_METRICS_EXPORTER=otlp wired into the pod env by the chart.
  *
@@ -21,13 +21,21 @@ import { metrics as otelMetrics, type Counter, type Histogram } from "@opentelem
 
 const METER_NAME = "slack-knowledge-bot";
 
+// Self-prefix every instrument with the service namespace so the Prometheus
+// series are deterministic — `query.latency_ms` becomes
+// `slack_knowledge_bot_query_latency_ms_bucket` purely from the instrument name
+// (OTLP→Prometheus lowercases dots to underscores + adds the type suffix), with
+// no dependency on a collector-side namespace rewrite.
+const NAMESPACE = "slack_knowledge_bot";
+const qualify = (name: string): string => `${NAMESPACE}.${name}`;
+
 const counters = new Map<string, Counter>();
 const histograms = new Map<string, Histogram>();
 
 function getCounter(name: string): Counter {
   let c = counters.get(name);
   if (!c) {
-    c = otelMetrics.getMeter(METER_NAME).createCounter(name);
+    c = otelMetrics.getMeter(METER_NAME).createCounter(qualify(name));
     counters.set(name, c);
   }
   return c;
@@ -36,7 +44,7 @@ function getCounter(name: string): Counter {
 function getHistogram(name: string): Histogram {
   let h = histograms.get(name);
   if (!h) {
-    h = otelMetrics.getMeter(METER_NAME).createHistogram(name, { unit: "ms" });
+    h = otelMetrics.getMeter(METER_NAME).createHistogram(qualify(name), { unit: "ms" });
     histograms.set(name, h);
   }
   return h;

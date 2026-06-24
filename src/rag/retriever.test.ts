@@ -106,7 +106,7 @@ describe("createRetriever — hybridSearch", () => {
     for (let i = 0; i < 5; i++) {
       await expect(retriever.hybridSearch("q", [0.1])).rejects.toThrow("pg-down");
     }
-    expect(onCounter).toHaveBeenCalledWith("circuit_open_total", 1, { source: "retrieval" });
+    expect(onCounter).toHaveBeenCalledWith("circuit.open", 1, { source: "retrieval" });
     expect(onCounter).toHaveBeenCalledTimes(1);
 
     // 6th call: breaker open → fail soft, empty hits.

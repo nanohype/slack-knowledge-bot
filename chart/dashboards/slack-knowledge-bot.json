@@ -1,7 +1,10 @@
 {
   "uid": "slack-knowledge-bot",
   "title": "SlackKnowledgeBot",
-  "tags": ["protohype", "slack-knowledge-bot"],
+  "tags": [
+    "protohype",
+    "slack-knowledge-bot"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",
@@ -37,10 +40,172 @@
   },
   "panels": [
     {
-      "id": 1,
-      "title": "Slack query — latency p50 / p95 / p99",
+      "type": "row",
+      "title": "SLO \u2014 Slack query success (99% over 30d)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Query success (30d)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "description": "Successful Slack queries / total over 30d vs the 99% objective. query.outcome{success|error}.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.99
+              },
+              {
+                "color": "green",
+                "value": 0.999
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "1 - (sum(rate(slack_knowledge_bot_query_outcome_total{outcome=\"error\",deployment_environment=\"$environment\"}[30d])) / clamp_min(sum(rate(slack_knowledge_bot_query_outcome_total{deployment_environment=\"$environment\"}[30d])), 1))"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "gauge",
+      "title": "Error budget remaining (30d)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "description": "Fraction of the 30-day 1% error budget still unspent.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "clamp_min(1 - ((sum(rate(slack_knowledge_bot_query_outcome_total{outcome=\"error\",deployment_environment=\"$environment\"}[30d])) / clamp_min(sum(rate(slack_knowledge_bot_query_outcome_total{deployment_environment=\"$environment\"}[30d])), 1)) / 0.01), 0)"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      }
+    },
+    {
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "title": "Error-budget burn rate (\u00d7objective)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "description": "error_ratio / (1 - objective); pages at 14.4\u00d7 (1h) / 6\u00d7 (6h).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "(sum(rate(slack_knowledge_bot_query_outcome_total{outcome=\"error\",deployment_environment=\"$environment\"}[1h])) / clamp_min(sum(rate(slack_knowledge_bot_query_outcome_total{deployment_environment=\"$environment\"}[1h])),1)) / 0.01",
+          "legendFormat": "1h"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "(sum(rate(slack_knowledge_bot_query_outcome_total{outcome=\"error\",deployment_environment=\"$environment\"}[6h])) / clamp_min(sum(rate(slack_knowledge_bot_query_outcome_total{deployment_environment=\"$environment\"}[6h])),1)) / 0.01",
+          "legendFormat": "6h"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      }
+    },
+    {
+      "id": 1,
+      "title": "Slack query \u2014 latency p50 / p95 / p99",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum by (le) (rate(slack_knowledge_bot_query_latency_ms_bucket{deployment_environment=\"$environment\"}[5m])))",
@@ -58,41 +223,76 @@
           "refId": "C"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ms"}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
     },
     {
       "id": 2,
-      "title": "Slack query — rate by outcome",
+      "title": "Slack query \u2014 rate by outcome",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(slack_knowledge_bot_query_total{deployment_environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{outcome}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum by (outcome) (rate(slack_knowledge_bot_query_outcome_total{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "{{outcome}}"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "reqps"}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      }
     },
     {
       "id": 3,
-      "title": "Bedrock — calls per second",
+      "title": "Bedrock \u2014 LLM calls/s",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 8, "w": 8, "h": 8},
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
       "targets": [
         {
-          "expr": "sum by (model) (rate(slack_knowledge_bot_bedrock_calls_total{deployment_environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{model}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum(rate(slack_knowledge_bot_llm_latency_ms_count{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "calls"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ops"}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
     },
     {
       "id": 4,
-      "title": "Bedrock — errors per second",
+      "title": "Bedrock \u2014 errors per second",
       "type": "timeseries",
-      "gridPos": {"x": 8, "y": 8, "w": 8, "h": 8},
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "sum(rate(slack_knowledge_bot_llm_error_total{deployment_environment=\"$environment\"}[5m]))",
@@ -100,27 +300,80 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.0167}]}}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.0167
+              }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 5,
-      "title": "WorkOS identity — lookups + cache",
+      "title": "LLM tokens/s (in / out / cache-read)",
       "type": "timeseries",
-      "gridPos": {"x": 16, "y": 8, "w": 8, "h": 8},
+      "gridPos": {
+        "x": 16,
+        "y": 15,
+        "w": 8,
+        "h": 8
+      },
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(slack_knowledge_bot_identity_lookup_total{deployment_environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{outcome}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum(rate(slack_knowledge_bot_llm_input_tokens_total{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "input"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum(rate(slack_knowledge_bot_llm_output_tokens_total{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "output"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum(rate(slack_knowledge_bot_llm_cache_read_tokens_total{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "cache-read"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ops"}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
     },
     {
       "id": 6,
-      "title": "Audit pipeline — total loss",
+      "title": "Audit pipeline \u2014 total loss",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "sum(rate(slack_knowledge_bot_audit_total_loss_total{deployment_environment=\"$environment\"}[5m]))",
@@ -128,35 +381,51 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0}]}}}
-    },
-    {
-      "id": 7,
-      "title": "Audit DLQ depth (cloudwatch-exporter required)",
-      "type": "timeseries",
-      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
-      "targets": [
-        {
-          "expr": "max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~\"slack-knowledge-bot-audit-dlq-.*\"})",
-          "legendFormat": "{{queue_name}}",
-          "refId": "A"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              }
+            ]
+          }
         }
-      ],
-      "fieldConfig": {"defaults": {"unit": "short"}}
+      }
     },
     {
       "id": 8,
-      "title": "Rate limiter — outcomes/s",
+      "title": "Rate limiter \u2014 hits by type/s",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 8
+      },
       "targets": [
         {
-          "expr": "sum by (outcome) (rate(slack_knowledge_bot_ratelimit_total{deployment_environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{outcome}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "sum by (limit_type) (rate(slack_knowledge_bot_ratelimit_hit_total{deployment_environment=\"$environment\"}[5m]))",
+          "legendFormat": "{{limit_type}}"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "ops"}}
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      }
     }
   ]
 }

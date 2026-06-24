@@ -105,7 +105,7 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
       );
       logger.debug({ userId: event.userId, kind: event.eventType }, "audit event emitted");
     } catch (err) {
-      counter("AuditPrimaryFail");
+      counter("audit.primary_fail");
       logger.error(
         { err, userId: event.userId, kind: event.eventType },
         "failed to emit audit event to SQS",
@@ -122,9 +122,9 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
             MessageDeduplicationId: dedupId(event),
           }),
         );
-        counter("AuditDLQWrite");
+        counter("audit.dlq_write");
       } catch (dlqErr) {
-        counter("AuditTotalLoss");
+        counter("audit.total_loss");
         logger.error({ dlqErr, userId: event.userId }, "also failed to write to audit DLQ");
       }
     }

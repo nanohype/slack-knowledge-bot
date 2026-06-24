@@ -111,9 +111,18 @@ prometheusRule:
     release: kube-prometheus-stack
 
 grafanaDashboard:
-  # Uses the grafana_dashboard sidecar pattern — Grafana auto-imports any
-  # ConfigMap with `grafana_dashboard: "1"` label.
+  # GrafanaDashboard CR reconciled by the grafana-operator onto the external
+  # Amazon Managed Grafana (works on both EKS and the local kx cluster).
   enabled: true
+  instanceSelector:
+    dashboards: external
+  allowCrossNamespaceImport: true
+  resyncPeriod: 24h
+
+# The audit DLQ-depth alert reads an AWS/SQS CloudWatch metric that needs a
+# cloudwatch-exporter feeding AMP — not deployed by default, so it's opt-in.
+auditDlq:
+  cloudwatchExporterEnabled: false
 
 # Audit consumer — long-running SQS poller. Replaces the CDK-era Lambda.
 # Drains tenantInfra.sqsAuditQueueUrl → DynamoDB (auditTable) + S3
@@ -194,6 +203,14 @@ networkPolicy:
           port: 5432
         - protocol: TCP
           port: 6379
+    # OTLP traces + metrics + logs to the grafana-agent OTLP receiver
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4318
 
 env:
   # Non-secret configuration. Secrets come through the ExternalSecret.
@@ -213,10 +230,10 @@ env:
   STALE_DOC_THRESHOLD_DAYS: "90"
   TOKEN_STORE_ENCRYPTION_CONTEXT: slack-knowledge-bot-token-store
   NODE_ENV: production
-  # OTel — exports to cluster-level Collector (otel-collector.observability.svc)
+  # OTel — exports to the grafana-agent OTLP receiver in the monitoring namespace
   # provisioned by eks-gitops. No per-pod sidecar.
   OTEL_SERVICE_NAME: slack-knowledge-bot
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://grafana-agent.monitoring.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_TRACES_SAMPLER: always_on
   OTEL_METRICS_EXPORTER: otlp

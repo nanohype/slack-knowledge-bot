@@ -98,7 +98,7 @@ await runAuditConsumer({
   auditBucket,
   shouldStop: () => stopping,
   log: (level, msg, ctx) => logger[level](ctx ?? {}, msg),
-  onProcessed: (outcome) => counter("AuditConsumerProcessed", 1, { outcome }),
+  onProcessed: (outcome) => counter("audit.consumer_processed", 1, { outcome }),
 });
 
 loopExited = true;
