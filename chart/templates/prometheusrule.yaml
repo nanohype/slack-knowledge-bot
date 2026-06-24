@@ -65,6 +65,7 @@ spec:
               Compliance-critical: an audit event failed both the primary SQS send AND the DLQ fallback.
               Runbook: docs/runbook.md § "Audit total loss"
 
+    {{- if .Values.auditDlq.cloudwatchExporterEnabled }}
     - name: slack-knowledge-bot.audit-queue
       interval: 1m
       rules:
@@ -84,4 +85,5 @@ spec:
               {{ "{{" }} $value | printf "%.0f" {{ "}}" }} message(s) in the audit DLQ. Primary SQS path is failing
               (or messages are being rejected by the audit Lambda / consumer pod).
               Runbook: docs/runbook.md § "Audit DLQ depth"
+    {{- end }}
 {{- end }}

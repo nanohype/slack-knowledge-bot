@@ -85,9 +85,9 @@ describe("createAuditLogger — emitQuery", () => {
     const calls = sqsMock.commandCalls(SendMessageCommand);
     expect(calls).toHaveLength(2);
     expect(calls[1].args[0].input.QueueUrl).toBe("https://sqs/dlq");
-    expect(onCounter).toHaveBeenCalledWith("AuditPrimaryFail");
-    expect(onCounter).toHaveBeenCalledWith("AuditDLQWrite");
-    expect(onCounter).not.toHaveBeenCalledWith("AuditTotalLoss");
+    expect(onCounter).toHaveBeenCalledWith("audit.primary_fail");
+    expect(onCounter).toHaveBeenCalledWith("audit.dlq_write");
+    expect(onCounter).not.toHaveBeenCalledWith("audit.total_loss");
     // DLQ payload must include the failureReason so ops can see why it got here.
     const dlqBody = JSON.parse(calls[1].args[0].input.MessageBody as string);
     expect(dlqBody.failureReason).toContain("primary down");
@@ -101,8 +101,8 @@ describe("createAuditLogger — emitQuery", () => {
     const onCounter = vi.fn();
     const logger = createAuditLogger({ ...BASE_DEPS, onCounter });
     await expect(logger.emitQuery(baseEvent())).resolves.toBeUndefined();
-    expect(onCounter).toHaveBeenCalledWith("AuditPrimaryFail");
-    expect(onCounter).toHaveBeenCalledWith("AuditTotalLoss");
+    expect(onCounter).toHaveBeenCalledWith("audit.primary_fail");
+    expect(onCounter).toHaveBeenCalledWith("audit.total_loss");
   });
 });
 

@@ -112,9 +112,9 @@ describe("createGenerator", () => {
       onCounter: (metric, value) => counts.push([metric, value]),
     });
     await generator.generate("PTO?", [hit()], false);
-    expect(counts).toContainEqual(["LLMInputTokens", 120]);
-    expect(counts).toContainEqual(["LLMOutputTokens", 45]);
-    expect(counts).toContainEqual(["LLMCacheReadTokens", 80]);
+    expect(counts).toContainEqual(["llm.input_tokens", 120]);
+    expect(counts).toContainEqual(["llm.output_tokens", 45]);
+    expect(counts).toContainEqual(["llm.cache_read_tokens", 80]);
   });
 
   it("marks a citation as stale when its lastModified exceeds the threshold", async () => {

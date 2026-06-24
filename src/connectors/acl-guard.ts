@@ -68,7 +68,7 @@ export function createAclGuard(deps: AclGuardConfig): AclGuard {
         windowMs: WINDOW_MS,
         halfOpenAfterMs: HALF_OPEN_AFTER_MS,
         now: deps.now,
-        onOpen: (n) => onCounter("circuit_open_total", 1, { source: n }),
+        onOpen: (n) => onCounter("circuit.open", 1, { source: n }),
       }),
     );
   }

@@ -113,7 +113,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     const rateResult = await deps.rateLimiter.check(userId, deps.workspaceId);
     if (!rateResult.allowed) {
       const limitType = rateResult.limitType ?? "user";
-      counter("RateLimitHit", 1, { limit_type: limitType });
+      counter("ratelimit.hit", 1, { limit_type: limitType });
       await say({
         ...formatRateLimitMessage(limitType, rateResult.resetAt, {
           userPerHour: deps.userPerHour,
@@ -236,12 +236,13 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     try {
       await deps.auditLogger.emitQuery(auditEvent);
     } catch (err) {
-      counter("AuditEmissionFail");
+      counter("audit.emission_fail");
       logger.error({ err }, "audit emission failed after blocking await");
     }
 
-    timing("QueryLatency", latencyMs);
-    if (redactedHits.length > 0) counter("RedactionCount", redactedHits.length);
+    timing("query.latency_ms", latencyMs);
+    counter("query.outcome", 1, { outcome: "success" });
+    if (redactedHits.length > 0) counter("redaction.count", redactedHits.length);
 
     logger.info(
       {
@@ -257,7 +258,12 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
 
   async function processQuery(args: ProcessQueryArgs): Promise<void> {
     const traceId = randomUUID();
-    return requestContext.run({ traceId }, () => runQuery({ ...args, traceId }));
+    try {
+      await requestContext.run({ traceId }, () => runQuery({ ...args, traceId }));
+    } catch (err) {
+      counter("query.outcome", 1, { outcome: "error" });
+      throw err;
+    }
   }
 
   async function handleMention({

@@ -58,7 +58,7 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
     windowMs: WINDOW_MS,
     halfOpenAfterMs: HALF_OPEN_AFTER_MS,
     now: deps.now,
-    onOpen: (n) => counter("circuit_open_total", 1, { source: n }),
+    onOpen: (n) => counter("circuit.open", 1, { source: n }),
   });
 
   return {
@@ -73,7 +73,7 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
         }),
         { abortSignal: AbortSignal.timeout(EMBED_TIMEOUT_MS) },
       );
-      timing("EmbeddingLatency", Date.now() - start);
+      timing("embedding.latency_ms", Date.now() - start);
       const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
       const parsed = EmbeddingResponseSchema.safeParse(raw);
       if (!parsed.success) {
@@ -95,7 +95,7 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
             deps.backend.textSearch({ query: queryText, topK: TOP_K }),
           ]),
         );
-        timing("RetrievalLatency", Date.now() - start);
+        timing("retrieval.latency_ms", Date.now() - start);
         const knnRanked = knnHits.map((hit, index) => ({ hit, rank: index + 1 }));
         const textRanked = textHits.map((hit, index) => ({ hit, rank: index + 1 }));
         const fused = rrfFusion(knnRanked, textRanked, FINAL_K);

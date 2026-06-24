@@ -119,7 +119,7 @@ describe("createAclGuard", () => {
       expect(result.wasRedacted).toBe(true);
     }
     expect(fetchImpl).toHaveBeenCalledTimes(5);
-    expect(onCounter).toHaveBeenCalledWith("circuit_open_total", 1, { source: "notion" });
+    expect(onCounter).toHaveBeenCalledWith("circuit.open", 1, { source: "notion" });
     expect(onCounter).toHaveBeenCalledTimes(1);
 
     // 6th probe: breaker is open, fetch MUST NOT be called.
