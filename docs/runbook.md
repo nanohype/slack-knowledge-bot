@@ -37,9 +37,9 @@ The app runs as two Deployments in namespace `tenants-protohype`: the main pod
 (Bolt Socket Mode + the `node:http` server on :3001 serving `/health` and
 `/oauth/:provider/{start,callback}`) and the audit-consumer (`node
 dist/bin/audit-consumer.js`, KEDA-scaled 0..5 on SQS queue depth). Both share
-one ServiceAccount whose `eks.amazonaws.com/role-arn` annotation points at the
-landing-zone `slack-knowledge-bot-platform` IRSA role — pods
-AssumeRoleWithWebIdentity into it on every AWS call.
+one ServiceAccount (`slack-knowledge-bot`) bound to the landing-zone
+`slack-knowledge-bot-platform` IAM role by an EKS Pod Identity association —
+pods get those credentials on every AWS call, no annotation.
 
 ---
 
@@ -59,7 +59,7 @@ The infrastructure splits across three layers:
   Redis, the KMS token key, and seeds `slack-knowledge-bot/<env>/app-secrets`.
 - **Platform CR** — `platform.yaml` declares slack-knowledge-bot as a tenant; the
   operator reconciles the namespace, ResourceQuota, LimitRange, default-deny
-  NetworkPolicy, ArgoCD AppProject, the IRSA role, KMS grants, and the S3 bucket
+  NetworkPolicy, ArgoCD AppProject, the IAM role, KMS grants, and the S3 bucket
   policy.
 - **Chart** — `chart/` renders the two Deployments, Service, Ingress
   (ingress-nginx + cert-manager TLS), ExternalSecret, NetworkPolicy, the
@@ -71,8 +71,8 @@ The infrastructure splits across three layers:
 # 1. Substrate — apply the landing-zone slack-knowledge-bot-platform component
 #    (DDB ×3, SQS + DLQ, S3 audit bucket, Aurora pgvector, ElastiCache Redis,
 #    the KMS token key, and the seeded slack-knowledge-bot/<env>/app-secrets).
-#    Its irsa_role_arn output drops into chart/values-<env>.yaml under
-#    aws.platformRoleArn.
+#    The IAM role is bound to the ServiceAccount by the Pod Identity
+#    association landing-zone creates.
 
 # 2. Seed the app-level secrets. Full operator guide (JSON shape, CLI commands,
 #    where each value comes from, rotation) lives at docs/secrets.md. ESO syncs

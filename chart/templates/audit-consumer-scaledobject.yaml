@@ -3,7 +3,7 @@
 # off the SQS audit queue depth. Triggers fetch metrics via the pod's IRSA
 # role (podIdentity: aws), so no separate credentials secret is needed.
 #
-# Required IAM permission for the IRSA role: sqs:GetQueueAttributes on the
+# Required IAM permission for the IAM role: sqs:GetQueueAttributes on the
 # audit queue ARN. The Platform CR's slack-knowledge-bot-sqs-consumer policy includes
 # this alongside ReceiveMessage / DeleteMessage / SendMessage.
 #
@@ -45,5 +45,5 @@ spec:
         queueURL: {{ .Values.tenantInfra.sqsAuditQueueUrl | quote }}
         queueLength: {{ .Values.auditConsumer.keda.targetQueueLength | quote }}
         awsRegion: {{ .Values.env.AWS_REGION | quote }}
-        identityOwner: operator   # use the pod's IRSA role, not KEDA's own
+        identityOwner: operator   # use the pod's IAM role, not KEDA's own
 {{- end }}

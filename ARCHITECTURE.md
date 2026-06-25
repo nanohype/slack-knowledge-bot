@@ -79,7 +79,7 @@ This repo owns the application — source, chart, Platform CR, gitops entry. Eve
 - KMS token key
 - Secrets Manager seeding (`slack-knowledge-bot/<env>/*`)
 
-Its `irsa_role_arn` output is the role slack-knowledge-bot's app pods assume — plumbed into the chart through the per-env `aws.platformRoleArn` Helm value. The chart contains **no inline IAM**; the trust relationship is owned in landing-zone and consumed by reference.
+Its IAM role is the role slack-knowledge-bot's app pods assume, bound to the chart's ServiceAccount by an EKS Pod Identity association. The chart contains **no inline IAM**; the role and the association are owned in landing-zone and consumed by reference.
 
 ### Cluster addons → `eks-gitops`
 
