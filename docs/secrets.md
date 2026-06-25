@@ -126,6 +126,6 @@ If you see `ZodError: required … missing`, one or more keys in the secret are 
 ## Security posture
 
 - Secrets Manager encrypts at rest with an AWS-managed KMS key. A customer-managed key there is configured on the `slack-knowledge-bot-platform` secret in landing-zone.
-- The pod IRSA role is granted `secretsmanager:GetSecretValue` only on the specific secret ARN — no wildcards. ESO reads the secret under that role to populate the synced k8s Secret.
+- The pod IAM role is granted `secretsmanager:GetSecretValue` only on the specific secret ARN — no wildcards. ESO reads the secret under that role to populate the synced k8s Secret.
 - Access to the secret from a human is audited to CloudTrail — `GetSecretValue` calls carry the invoking principal. Routine rotation should be performed by a dedicated deploy role, not a personal IAM user, so the audit trail stays actionable.
 - Never commit a populated `/tmp/slack-knowledge-bot-*-secrets.json` to a chat, issue tracker, or notebook. The file should exist only between the `cat > …` and `shred` / `rm -P` in the snippets above.

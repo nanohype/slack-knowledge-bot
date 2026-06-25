@@ -11,7 +11,7 @@ Internal Slack knowledge bot — answers employee questions over Notion, Conflue
 
 ## What it is
 
-A Slack bot that answers grounded questions over a company's knowledge sources. The ACL check runs _after_ retrieval, against the asking user's own OAuth tokens — a document scoring high in the index is dropped if the user can't read it in the source system. There is no shared service-account view of company knowledge, so a query can only surface what that user could already see. Bedrock (Claude Sonnet for generation, Titan for embeddings) runs on-account via IRSA; no source content leaves the account.
+A Slack bot that answers grounded questions over a company's knowledge sources. The ACL check runs _after_ retrieval, against the asking user's own OAuth tokens — a document scoring high in the index is dropped if the user can't read it in the source system. There is no shared service-account view of company knowledge, so a query can only surface what that user could already see. Bedrock (Claude Sonnet for generation, Titan for embeddings) runs on-account via EKS Pod Identity; no source content leaves the account.
 
 Built as a reusable subsystem: every external-IO service is a `createXxx(deps)` factory accepting typed ports (`typeof fetch`, a narrow `RedisPort`, a `RetrievalBackend`, or an AWS SDK client). `src/index.ts` constructs the real clients once and threads them through, so swapping Redis, the directory provider, the retrieval backend, or the LLM is a one-file change. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the bounded contexts and data flow.
 
@@ -35,11 +35,11 @@ task ci   # build + lint + typecheck + test + format:check + helm lint/template 
 
 Ships as a [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) Platform tenant. The trio:
 
-- **`chart/`** — the application Helm chart: Deployment + Service + Ingress (ingress-nginx + cert-manager) + NetworkPolicy + ServiceAccount (IRSA) + ExternalSecret (ESO), plus the KEDA-scaled audit consumer, PrometheusRule alerts, and a Grafana dashboard. Per-env deltas in `chart/values-{staging,production}.yaml`.
-- **`platform.yaml`** — the `Platform` CR + `BudgetPolicy` declaring the tenant boundary (`tenant: protohype`, namespace `tenants-protohype`). The operator reconciles the Namespace, ResourceQuota, IRSA role, KMS grants, S3 bucket policy, and ArgoCD AppProject.
+- **`chart/`** — the application Helm chart: Deployment + Service + Ingress (ingress-nginx + cert-manager) + NetworkPolicy + ServiceAccount (Pod Identity) + ExternalSecret (ESO), plus the KEDA-scaled audit consumer, PrometheusRule alerts, and a Grafana dashboard. Per-env deltas in `chart/values-{staging,production}.yaml`.
+- **`platform.yaml`** — the `Platform` CR + `BudgetPolicy` declaring the tenant boundary (`tenant: protohype`, namespace `tenants-protohype`). The operator reconciles the Namespace, ResourceQuota, IAM role, KMS grants, S3 bucket policy, and ArgoCD AppProject.
 - **`gitops/applicationset-entry.yaml`** — the ApplicationSet entry registered into [`nanohype/eks-gitops`](https://github.com/nanohype/eks-gitops) for ArgoCD reconciliation.
 
-The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). Its `irsa_role_arn` output feeds the chart's `aws.platformRoleArn`. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
+The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). It binds the role to the chart's ServiceAccount via an EKS Pod Identity association. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
 
 ## Boundaries
 

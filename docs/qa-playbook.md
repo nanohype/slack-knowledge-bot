@@ -47,15 +47,15 @@ npm ci && npm run build:oauth
 
 ```bash
 # from landing-zone, in the component's terragrunt dir
-terragrunt output irsa_role_arn      # → drops into chart/values-staging.yaml aws.platformRoleArn
+terragrunt output irsa_role_arn      # the IAM role (bound by the Pod Identity association — not a chart value)
 terragrunt output pg_host            # → tenantInfra.pgHost
 ```
 
-These outputs are wired into `chart/values-staging.yaml` under `aws.platformRoleArn` + `tenantInfra.*`. See `docs/secrets.md` for the secret payload shape.
+These outputs are wired into `chart/values-staging.yaml` under `tenantInfra.*` (the IAM role is bound by the Pod Identity association). See `docs/secrets.md` for the secret payload shape.
 
 ### 2b. Platform CR
 
-Apply the Platform CR once. The operator reconciles the namespace, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, the IRSA role, KMS grants, and the S3 bucket policy:
+Apply the Platform CR once. The operator reconciles the namespace, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, the IAM role, KMS grants, and the S3 bucket policy:
 
 ```bash
 kubectl apply -f platform.yaml
@@ -90,7 +90,7 @@ curl -s "https://slack-knowledge-bot-staging.example.com/health"
 
 ## 3. Enable Bedrock model access (5 min)
 
-The `us.anthropic.claude-sonnet-4-6` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IRSA role deliberately doesn't have. **Your admin session does.**
+The `us.anthropic.claude-sonnet-4-6` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IAM role deliberately doesn't have. **Your admin session does.**
 
 For each of us-east-1, us-east-2, us-west-2:
 
@@ -471,7 +471,7 @@ kubectl -n tenants-protohype describe externalsecret slack-knowledge-bot   # Sec
 AccessDeniedException: … aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe … to enable access to this model.
 ```
 
-**Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The pod's IRSA role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
+**Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The pod's IAM role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
 
 **Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 4.6 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted.
 

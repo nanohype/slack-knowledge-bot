@@ -24,7 +24,7 @@ defining control is that **no query ever sees more than the asking user could se
 
 ### Identity & secrets
 
-- No long-lived credentials in the app. Pods get AWS access via IRSA (Workload Identity);
+- No long-lived credentials in the app. Pods get AWS access via EKS Pod Identity;
   there are no static keys anywhere in the repo or image.
 - Per-user OAuth tokens are stored in DynamoDB under **KMS envelope encryption**, never in
   Secrets Manager (per-user secrets would cost orders of magnitude more at scale).
@@ -63,7 +63,7 @@ defining control is that **no query ever sees more than the asking user could se
 ## Compliance
 
 slack-knowledge-bot exposes the controls needed for **SOC 2 Type II** — encrypted-at-rest
-token store (KMS) and audit log, a complete per-query audit trail, IRSA-only access with no
+token store (KMS) and audit log, a complete per-query audit trail, Pod-Identity-only access with no
 static credentials, and PII scrubbing at the persistence boundary. Substrate-level controls
 (CIS EKS baseline, Pod Security Standards, image signing) are enforced upstream by
 `landing-zone` and `eks-gitops`.

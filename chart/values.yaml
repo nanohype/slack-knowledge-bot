@@ -14,18 +14,13 @@ service:
 
 serviceAccount:
   create: true
-  # Free-form additional annotations to merge into the ServiceAccount. The
-  # eks.amazonaws.com/role-arn annotation is generated separately from
-  # aws.platformRoleArn so per-env role swaps don't trample on this map.
+  # Pinned to the app name so it matches the service_account of the EKS Pod
+  # Identity association landing-zone's slack-knowledge-bot-platform component
+  # creates — that association binds this ServiceAccount to its IAM role, so the
+  # pod needs no role-arn annotation and the chart carries no AWS account values.
+  name: slack-knowledge-bot
+  # Free-form additional annotations to merge into the ServiceAccount.
   annotations: {}
-
-aws:
-  # ARN of the IRSA role slack-knowledge-bot's pods assume. Comes from landing-zone's
-  # slack-knowledge-bot-platform component (output: irsa_role_arn). Empty at the chart
-  # level — per-env values plumb in the actual ARN. Empty value omits the
-  # eks.amazonaws.com/role-arn annotation entirely (useful for local
-  # helm-template / kind smoke runs where no real IAM role exists).
-  platformRoleArn: ""
 
 # Resource attributes the shared chart labels read (tenant-chart-base.labels →
 # agents.nanohype.dev/{tenant,platform}). The OTEL_RESOURCE_ATTRIBUTES env var

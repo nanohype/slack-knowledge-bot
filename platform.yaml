@@ -11,15 +11,15 @@
 #   - ResourceQuota + LimitRange
 #   - Default-deny NetworkPolicy (the chart layers app-specific rules on top)
 #   - ArgoCD AppProject scoped to this Platform
-#   - Per-Platform IRSA role with baseline policy + spec.identity.extraPolicyArns
+#   - Per-Platform IAM role with baseline policy + spec.identity.extraPolicyArns
 #     attached. Trust policy permits the `tenant-runtime` ServiceAccount in
 #     the tenant namespace
 #
 # What slack-knowledge-bot's chart owns separately (NOT operator-reconciled):
 #   - The chart's own ServiceAccount (`slack-knowledge-bot`) — used by both the main pod
-#     and the audit-consumer Deployment. Its `eks.amazonaws.com/role-arn`
-#     annotation comes from landing-zone's slack-knowledge-bot-platform component
-#     (output: irsa_role_arn) via per-env Helm values (aws.platformRoleArn).
+#     and the audit-consumer Deployment. It is bound to landing-zone's
+#     slack-knowledge-bot-platform IAM role by an EKS Pod Identity association
+#     that component creates — no role-arn annotation.
 #     The operator's `<env>-slack-knowledge-bot-tenant` role trusts the `tenant-runtime`
 #     SA, not slack-knowledge-bot's `slack-knowledge-bot` SA — different SA, different trust, two
 #     roles serving two workload classes (AgentFleet pods vs slack-knowledge-bot's
@@ -29,7 +29,7 @@
 # Redis, Bedrock invoke policy, Secrets Manager seeding) — see landing-zone's
 # components/aws/slack-knowledge-bot-platform/. Once that component's per-env entry
 # applies, the outputs are wired into the chart's per-env values
-# (`tenantInfra.*` + `aws.platformRoleArn`).
+# (`tenantInfra.*`).
 
 ---
 apiVersion: governance.nanohype.dev/v1alpha1
@@ -60,9 +60,9 @@ spec:
     name: slack-knowledge-bot
   identity:
     # Bedrock model access for AgentFleet pods (tenant-runtime SA on the
-    # operator-reconciled IRSA role). slack-knowledge-bot's own app pods don't use this
-    # role; they assume the landing-zone-owned `slack-knowledge-bot-platform` IRSA role
-    # (via aws.platformRoleArn in the chart). The operator's role still
+    # operator-reconciled IAM role). slack-knowledge-bot's own app pods don't use this
+    # role; they assume the landing-zone-owned `slack-knowledge-bot-platform` IAM role
+    # (via the Pod Identity association). The operator's role still
     # exists for AgentFleet workloads in this namespace if/when they land.
     allowedModelFamilies:
       - anthropic

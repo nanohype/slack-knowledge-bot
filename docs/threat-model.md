@@ -66,7 +66,7 @@
 ### T6: Elevation of Privilege
 | Threat | Vector | Mitigation | Status |
 |--------|--------|------------|--------|
-| Pod IRSA role abuse | Compromise the app pod | Least-privilege IRSA role; no `*` actions; specific resource ARNs | ✅ Implemented |
+| Pod IAM role abuse | Compromise the app pod | Least-privilege IAM role; no `*` actions; specific resource ARNs | ✅ Implemented |
 | KMS key misuse | Use token key to decrypt other secrets | Separate KMS key per purpose; encryption context binding (`purpose: slack-knowledge-bot-token-store`) | ✅ Implemented |
 | DDB full-table read | Pod reads all tokens | IAM allows `GetItem` per key only (userId); no Scan permission | ⚠️ Verify IAM policy — landing-zone role currently grants table-level ReadWrite |
 
@@ -184,9 +184,9 @@ Then: Query 21 (to either replica) is blocked
 ## 5. Security Findings & Remediations
 
 ### FINDING-01: IAM Policy Too Broad (HIGH)
-**Finding:** The landing-zone `slack-knowledge-bot-platform` IRSA role grants table-level ReadWrite (Scan + full-table access) on the token store. The pod only needs GetItem/PutItem/DeleteItem.
+**Finding:** The landing-zone `slack-knowledge-bot-platform` IAM role grants table-level ReadWrite (Scan + full-table access) on the token store. The pod only needs GetItem/PutItem/DeleteItem.
 
-**Remediation:** Scope the DynamoDB statement on the IRSA role in landing-zone to the least-privilege action set:
+**Remediation:** Scope the DynamoDB statement on the IAM role in landing-zone to the least-privilege action set:
 ```json
 {
   "Effect": "Allow",
@@ -198,7 +198,7 @@ Then: Query 21 (to either replica) is blocked
 ### FINDING-02: Bedrock Logging Opt-Out Not Enforced (HIGH)
 **Finding:** Bedrock model-invocation logging can capture prompt + completion bodies. Source content must not land in Bedrock invocation logs (CloudWatch / S3).
 
-**Remediation:** Bedrock model-invocation logging is an account/region-level setting (`PutModelInvocationLoggingConfiguration`), not something the app or this chart controls — there is no request header that toggles it. It is governed by landing-zone at the account/region level (an org/substrate concern). Verify the desired posture (logging disabled, or routed to a controlled, access-restricted target) in the AWS account hosting Bedrock for each inference region; confirm the app's IRSA role cannot change it.
+**Remediation:** Bedrock model-invocation logging is an account/region-level setting (`PutModelInvocationLoggingConfiguration`), not something the app or this chart controls — there is no request header that toggles it. It is governed by landing-zone at the account/region level (an org/substrate concern). Verify the desired posture (logging disabled, or routed to a controlled, access-restricted target) in the AWS account hosting Bedrock for each inference region; confirm the app's IAM role cannot change it.
 
 ### FINDING-03: Redis TLS Required (MEDIUM)
 **Finding:** transit encryption is enabled on the ElastiCache group in landing-zone, but the `ioredis` connection must also enable TLS.

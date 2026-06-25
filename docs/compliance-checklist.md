@@ -12,7 +12,7 @@
 |---------|---------------|----------|
 | CC6.1 — Access provisioning | WorkOS Directory Sync + SCIM; per-user OAuth required before any data access | WorkOS audit log; the OAuth flow |
 | CC6.2 — Access removal | OAuth tokens have 2-year DDB TTL; user offboarding via WorkOS Directory Sync (suspend → token refresh fails → access denied) | Directory Sync provisioner; DDB TTL |
-| CC6.3 — Least-privilege access | Pod IRSA role: GetItem/PutItem only (no Scan); Bedrock: specific model ARNs only | IRSA policy on the landing-zone `slack-knowledge-bot-platform` role |
+| CC6.3 — Least-privilege access | Pod IAM role: GetItem/PutItem only (no Scan); Bedrock: specific model ARNs only | IRSA policy on the landing-zone `slack-knowledge-bot-platform` role |
 | CC6.6 — Data transmission security | All external calls HTTPS; Redis TLS enforced; VPC private subnets; default-deny NetworkPolicy + egress allow-list | TLS enforced in code; `networkpolicy.yaml` |
 | CC6.7 — Data encryption at rest | DDB encrypted (AWS-managed KMS); S3 encrypted; token KMS envelope encryption | landing-zone `slack-knowledge-bot-platform` substrate |
 | CC6.8 — Malware/vulnerability controls | Image scan (trivy) + dependency scanning in CI | `security.yml`; `npm audit` in CI |

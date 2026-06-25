@@ -49,7 +49,7 @@ spec:
             summary: SlackKnowledgeBot Bedrock LLM errors >= 5 in 5 minutes
             description: |
               LLM (Bedrock) error rate is {{ "{{" }} $value | printf "%.4f" {{ "}}" }}/s (≥ 5 errors per 5 minutes).
-              Likely causes: Bedrock throttling, model deprecation, IAM regression on the Platform IRSA role.
+              Likely causes: Bedrock throttling, model deprecation, IAM regression on the Platform IAM role.
               Runbook: docs/runbook.md § "LLM errors"
 
         - alert: SlackKnowledgeBotAuditTotalLoss
