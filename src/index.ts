@@ -211,11 +211,25 @@ const app = new App({
 queryHandler.registerWith(app);
 disconnectCommand.registerWith(app);
 
+// Readiness is independent of liveness. `/health` (liveness) stays
+// unconditionally OK so a Bolt/token failure never crash-loops the pod —
+// operators need a live container to rotate the secret. `/ready` reflects
+// whether the bot can actually serve: true only once `app.start()` succeeds,
+// and flipped false at SIGTERM so the kubelet pulls the pod out of Service
+// endpoints before the in-flight drain begins.
+let ready = false;
+
 const httpServer = http.createServer(async (req, res) => {
   try {
     if (req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", service: "slack-knowledge-bot" }));
+      return;
+    }
+
+    if (req.url === "/ready") {
+      res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: ready ? "ready" : "not_ready" }));
       return;
     }
 
@@ -245,6 +259,9 @@ const SHUTDOWN_DRAIN_MS = 25_000;
 
 async function shutdown(signal: string) {
   logger.info({ signal }, "shutting down");
+  // 0) Fail readiness first so the kubelet removes this pod from the Service
+  //    endpoints — new inbound (OAuth) requests stop arriving before we drain.
+  ready = false;
   // 1) Stop accepting new Slack events so the in-flight set can only shrink.
   try {
     await app.stop();
@@ -293,13 +310,15 @@ process.on("uncaughtException", (err) => {
   httpServer.listen(3001);
   try {
     await app.start();
+    ready = true;
     logger.info({ env: config.NODE_ENV }, "SlackKnowledgeBot is running");
   } catch (err) {
     // Bolt (Socket Mode) auth failure — usually a bad SLACK_APP_TOKEN or a
-    // transient Slack outage. Keep the HTTP server up so /health and
-    // /oauth/* routes continue serving; operators can update the
-    // Secrets Manager value and restart the Deployment without the
-    // container crashing and crash-looping the pod.
-    logger.error({ err }, "Bolt start failed; HTTP server still up for /health");
+    // transient Slack outage. The HTTP server stays up so /health passes and
+    // operators can update the Secrets Manager value and restart the
+    // Deployment without the container crash-looping. Readiness stays false:
+    // the pod is held out of Service rotation and a rolling update stalls
+    // rather than completing with a bot that can't answer queries.
+    logger.error({ err }, "Bolt start failed; HTTP server up for /health, readiness held false");
   }
 })();
