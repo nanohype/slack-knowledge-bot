@@ -26,7 +26,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
 The chart alone is not enough to run the app. Two sibling files at the repo root complete the tenant trio:
 
 - `../platform.yaml` — Platform CR declaring this app as a tenant of the `protohype` team. The operator reconciles Namespace, ResourceQuota, IAM role, KMS grants, S3 bucket policy from this CR. Apply once during initial setup.
-- `../gitops/applicationset-entry.yaml` — ApplicationSet entry registered into `nanohype/eks-gitops` (or `aks-gitops`). ArgoCD picks up the entry and rolls out this chart.
+- `../gitops/applicationset-entry.yaml` — ApplicationSet entry registered into `nanohype/eks-gitops`. ArgoCD picks up the entry and rolls out this chart.
 
 ## Required landing-zone components
 
