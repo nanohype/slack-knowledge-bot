@@ -1,9 +1,12 @@
-import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import base from './eslint.base.mjs';
 
 export default tseslint.config(
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
+  // Org base (vendored from nanohype library/config, drift-gated).
+  ...base,
+  // src/vendor/ holds byte-identical copies of @nanohype/runtime modules,
+  // linted at their source of truth — local lint fixes there would be drift.
+  { ignores: ['src/vendor/', 'tests/', 'vitest.config.ts'] },
   {
     files: ['src/**/*.ts'],
     languageOptions: {
@@ -13,15 +16,7 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/no-explicit-any': 'error',
       'no-console': ['warn', { allow: ['error', 'warn'] }],
     },
-  },
-  {
-    ignores: ['dist/', 'node_modules/', 'coverage/', 'tests/', 'vitest.config.ts'],
   },
 );

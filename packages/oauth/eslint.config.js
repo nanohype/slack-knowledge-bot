@@ -1,9 +1,9 @@
-import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import base from '../../eslint.base.mjs';
 
 export default tseslint.config(
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
+  // Org base (vendored at the repo root from nanohype library/config).
+  ...base,
   {
     files: ['src/**/*.ts'],
     languageOptions: {
@@ -12,14 +12,5 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-    },
-  },
-  {
-    ignores: ['dist/', 'node_modules/'],
   },
 );

@@ -57,8 +57,20 @@ jobs:
       - name: Audit (production deps)
         run: npm run audit:prod
 
-      - name: Check (typecheck + lint + format:check + test)
-        run: npm run check
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Test
+        # --coverage enforces the thresholds in vitest.config.ts (75/60/75/75
+        # statements/branches/functions/lines) so coverage can't silently
+        # regress — same shape as the other tenant repos' CI.
+        run: npm run test:coverage
 
       - name: SDK-mock ban invariant (ports-not-patches)
         # Ports, not SDK patches: every cross-boundary service is a
@@ -117,19 +129,20 @@ jobs:
           fi
           echo "Slack WebClient construction invariant holds"
 
-      # src/runtime/ is vendored from nanohype library/runtime — the single
-      # source of truth (same contract as the vendored tenant-chart-base
-      # chart). The copies must stay byte-identical; a drifted copy is the
-      # defect. Checked out AFTER `npm run check` so the extra tree never
-      # feeds prettier/eslint/vitest.
-      - name: Checkout nanohype (runtime library source of truth)
+      # Every vendored surface (src/vendor/runtime modules, .prettierrc.json,
+      # eslint.base.mjs, the tenant-chart-base chart, and the sync script
+      # itself) is a byte-identical copy of its source of truth in
+      # nanohype/nanohype, declared in scripts/vendored.json. A drifted copy
+      # is the defect. Checked out AFTER the lint/format/test steps so the
+      # extra tree never feeds prettier/eslint/vitest.
+      - name: Checkout nanohype (vendored source of truth)
         uses: actions/checkout@v4
         with:
           repository: nanohype/nanohype
           path: nanohype-src
 
-      - name: Runtime library drift check (byte-identical vendored copies)
-        run: node scripts/sync-runtime.mjs --check
+      - name: Vendored copy drift check (byte-identical copies)
+        run: node scripts/sync-vendored.mjs --check
         env:
           NANOHYPE_DIR: ${{ github.workspace }}/nanohype-src
 
