@@ -11,25 +11,28 @@
 #   - ResourceQuota + LimitRange
 #   - Default-deny NetworkPolicy (the chart layers app-specific rules on top)
 #   - ArgoCD AppProject scoped to this Platform
-#   - Per-Platform IAM role with baseline policy + spec.identity.extraPolicyArns
-#     attached. Trust policy permits the `tenant-runtime` ServiceAccount in
-#     the tenant namespace
+#   - Per-Platform IAM role (`<env>-slack-knowledge-bot-tenant`) with the baseline
+#     policy + spec.identity.extraPolicyArns attached and Bedrock invoke
+#     clamped to spec.identity.allowedModels (bedrock-model-scoping inline
+#     policy). Trust is the EKS Pod Identity service principal; SAs bind via
+#     Pod Identity associations (`tenant-runtime` by the operator, the app
+#     SA by landing-zone)
 #
 # What slack-knowledge-bot's chart owns separately (NOT operator-reconciled):
 #   - The chart's own ServiceAccount (`slack-knowledge-bot`) — used by both the main pod
-#     and the audit-consumer Deployment. It is bound to landing-zone's
-#     slack-knowledge-bot-platform IAM role by an EKS Pod Identity association
-#     that component creates — no role-arn annotation.
-#     The operator's `<env>-slack-knowledge-bot-tenant` role trusts the `tenant-runtime`
-#     SA, not slack-knowledge-bot's `slack-knowledge-bot` SA — different SA, different trust, two
-#     roles serving two workload classes (AgentFleet pods vs slack-knowledge-bot's
-#     app pods)
+#     and the audit-consumer Deployment. It is bound to the operator-reconciled
+#     `<env>-slack-knowledge-bot-tenant` role by an EKS Pod Identity association the
+#     landing-zone slack-knowledge-bot-platform component creates — no role-arn
+#     annotation. App pods and AgentFleet pods (`tenant-runtime` SA) share that
+#     role: one Platform, one privilege domain. Bedrock access on the role is
+#     the agent-iam baseline clamped to spec.identity below; the app's
+#     substrate grants arrive via spec.identity.extraPolicyArns.
 #
 # Tenant-shared infra (KMS, DDB, SQS, S3, Aurora pgvector, ElastiCache
-# Redis, Bedrock invoke policy, Secrets Manager seeding) — see landing-zone's
-# components/aws/slack-knowledge-bot-platform/. Once that component's per-env entry
-# applies, the outputs are wired into the chart's per-env values
-# (`tenantInfra.*`).
+# Redis, Secrets Manager seeding, the app-access managed policy) — see
+# landing-zone's components/aws/slack-knowledge-bot-platform/. Once that
+# component's per-env entry applies, the outputs are wired into the chart's
+# per-env values (`tenantInfra.*`).
 
 ---
 apiVersion: governance.nanohype.dev/v1alpha1
@@ -59,19 +62,20 @@ spec:
   budget:
     name: slack-knowledge-bot
   identity:
-    # Bedrock model access for AgentFleet pods (tenant-runtime SA on the
-    # operator-reconciled IAM role). slack-knowledge-bot's own app pods don't use this
-    # role; they assume the landing-zone-owned `slack-knowledge-bot-platform` IAM role
-    # (via the Pod Identity association). The operator's role still
-    # exists for AgentFleet workloads in this namespace if/when they land.
-    allowedModelFamilies:
-      - anthropic
-      - amazon
-    # ARN(s) of additional managed policies the operator attaches on top of
-    # the per-tenant baseline. Populate once landing-zone's slack-knowledge-bot-platform
-    # component is refactored to emit `irsa_managed_policy_arn` as an
-    # output. Leave empty until then — the chart's app pods don't need this
-    # since they assume the landing-zone-owned role directly.
+    # Bedrock model access for every pod in this Platform — app pods and
+    # AgentFleet pods share the operator-reconciled `<env>-slack-knowledge-bot-tenant`
+    # role. The operator clamps Bedrock invoke on that role to exactly these
+    # IDs (bedrock-model-scoping inline policy over the baseline grant); the
+    # entries match what the app's config invokes.
+    allowedModels:
+      - us.anthropic.claude-sonnet-4-6 # BEDROCK_LLM_MODEL_ID — answer generation
+      - amazon.titan-embed-text-v2:0 # BEDROCK_EMBEDDING_MODEL_ID — query embeddings
+    # The app's substrate grants (DDB, SQS, S3, KMS, Secrets Manager,
+    # CloudWatch) — landing-zone's slack-knowledge-bot-platform component
+    # emits the policy as `app_access_policy_arn`. Account-scoped, so it is
+    # filled per environment at apply time (landing-zone
+    # docs/runbooks/model-access-cutover.md):
+    #   arn:aws:iam::<account>:policy/eks-agent-platform/slack-knowledge-bot-<env>-app-access
     extraPolicyArns: []
   compliance:
     soc2: true
