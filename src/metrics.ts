@@ -7,55 +7,27 @@
  * `@opentelemetry/auto-instrumentations-node/register` (NODE_OPTIONS in the
  * Dockerfile) plus OTEL_METRICS_EXPORTER=otlp wired into the pod env by the chart.
  *
- * Public surface: `timing` → histogram (ms); `counter` → monotonic counter.
- * `flushMetrics` is a no-op —
- * the SDK batches + flushes on its own schedule, and shutdown is already
- * handled by the OTel exporter.
- *
- * When no meter provider is registered (e.g. in vitest without the auto-
- * instrumentations --require hook), the OTel API degrades to a no-op. That's
- * intentional: tests don't need a mock metrics backend, and adding one would
- * just re-assert the SDK's own contract.
+ * The lazy-instrument core (namespace qualification — `query.latency_ms`
+ * becomes `slack_knowledge_bot_query_latency_ms_bucket` purely from the
+ * instrument name — per-name caching, no-op degradation without a provider)
+ * is the vendored `@nanohype/runtime` metrics module; this file is the app's
+ * surface over it: `timing` → histogram (ms); `counter` → monotonic counter.
+ * `flushMetrics` is a no-op — the SDK batches + flushes on its own schedule,
+ * and shutdown is already handled by the OTel exporter.
  */
-import { metrics as otelMetrics, type Counter, type Histogram } from '@opentelemetry/api';
+import { createMetrics } from './runtime/metrics.js';
 
-const METER_NAME = 'slack-knowledge-bot';
-
-// Self-prefix every instrument with the service namespace so the Prometheus
-// series are deterministic — `query.latency_ms` becomes
-// `slack_knowledge_bot_query_latency_ms_bucket` purely from the instrument name
-// (OTLP→Prometheus lowercases dots to underscores + adds the type suffix), with
-// no dependency on a collector-side namespace rewrite.
-const NAMESPACE = 'slack_knowledge_bot';
-const qualify = (name: string): string => `${NAMESPACE}.${name}`;
-
-const counters = new Map<string, Counter>();
-const histograms = new Map<string, Histogram>();
-
-function getCounter(name: string): Counter {
-  let c = counters.get(name);
-  if (!c) {
-    c = otelMetrics.getMeter(METER_NAME).createCounter(qualify(name));
-    counters.set(name, c);
-  }
-  return c;
-}
-
-function getHistogram(name: string): Histogram {
-  let h = histograms.get(name);
-  if (!h) {
-    h = otelMetrics.getMeter(METER_NAME).createHistogram(qualify(name), { unit: 'ms' });
-    histograms.set(name, h);
-  }
-  return h;
-}
+const metrics = createMetrics({
+  meterName: 'slack-knowledge-bot',
+  namespace: 'slack_knowledge_bot',
+});
 
 export function timing(name: string, ms: number, dimensions?: Record<string, string>): void {
-  getHistogram(name).record(ms, dimensions);
+  metrics.timing(name, ms, dimensions);
 }
 
 export function counter(name: string, value = 1, dimensions?: Record<string, string>): void {
-  getCounter(name).add(value, dimensions);
+  metrics.counter(name, value, dimensions);
 }
 
 /**

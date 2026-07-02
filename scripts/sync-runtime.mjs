@@ -33,7 +33,10 @@ const DEST = join(ROOT, 'src', 'runtime');
 const CHECK = process.argv.includes('--check');
 
 /** The runtime modules this app consumes. Add here when adopting another. */
-const MODULES = ['circuit-breaker.ts', 'pii.ts', 'workos-directory.ts'];
+const MODULES = ['circuit-breaker.ts', 'metrics.ts', 'pii.ts', 'workos-directory.ts'];
+
+/** Org-canonical configs carried the same way: byte-identical, drift-gated. */
+const CONFIGS = [{ src: join('library', 'config', 'prettierrc.json'), dest: '.prettierrc.json' }];
 
 async function main() {
   try {
@@ -71,6 +74,30 @@ async function main() {
     } else {
       await writeFile(dest, want);
       console.log(`vendored ${file} -> ${rel}`);
+    }
+  }
+
+  for (const cfg of CONFIGS) {
+    const src = join(NANOHYPE_DIR, cfg.src);
+    const dest = join(ROOT, cfg.dest);
+    const want = await readFile(src, 'utf8');
+
+    if (CHECK) {
+      let have = null;
+      try {
+        have = await readFile(dest, 'utf8');
+      } catch {
+        // missing counts as drift
+      }
+      if (have === want) {
+        console.log(`ok  ${cfg.dest}`);
+      } else {
+        console.error(`DRIFT  ${cfg.dest} — run \`npm run sync:runtime\``);
+        drift++;
+      }
+    } else {
+      await writeFile(dest, want);
+      console.log(`vendored ${cfg.src} -> ${cfg.dest}`);
     }
   }
 
