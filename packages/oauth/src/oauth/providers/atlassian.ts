@@ -3,9 +3,9 @@
 // Atlassian's OAuth 2.0 (3LO) endpoint. Requires `audience=api.atlassian.com`
 // on the auth URL; tokens are short-lived (typically ~1h) and refreshable.
 
-import type { OAuthProvider, TokenGrant } from "./types.js";
-import { registerProvider } from "./registry.js";
-import { expiresAtFromExpiresIn } from "./shared.js";
+import type { OAuthProvider, TokenGrant } from './types.js';
+import { registerProvider } from './registry.js';
+import { expiresAtFromExpiresIn } from './shared.js';
 
 interface AtlassianTokenResponse {
   access_token: string;
@@ -27,20 +27,20 @@ function parse(raw: unknown, previous?: TokenGrant): TokenGrant {
 }
 
 export const atlassianProvider: OAuthProvider = {
-  name: "atlassian",
+  name: 'atlassian',
   authUrl:
-    "https://auth.atlassian.com/authorize" +
-    "?audience=api.atlassian.com" +
-    "&response_type=code" +
-    "&prompt=consent" +
-    "&client_id={client_id}" +
-    "&redirect_uri={redirect_uri}" +
-    "&scope={scope}" +
-    "&state={state}" +
-    "&code_challenge={code_challenge}" +
-    "&code_challenge_method={code_challenge_method}",
-  tokenUrl: "https://auth.atlassian.com/oauth/token",
-  defaultScopes: ["read:confluence-content.all", "read:confluence-space.summary", "offline_access"],
+    'https://auth.atlassian.com/authorize' +
+    '?audience=api.atlassian.com' +
+    '&response_type=code' +
+    '&prompt=consent' +
+    '&client_id={client_id}' +
+    '&redirect_uri={redirect_uri}' +
+    '&scope={scope}' +
+    '&state={state}' +
+    '&code_challenge={code_challenge}' +
+    '&code_challenge_method={code_challenge_method}',
+  tokenUrl: 'https://auth.atlassian.com/oauth/token',
+  defaultScopes: ['read:confluence-content.all', 'read:confluence-space.summary', 'offline_access'],
   usePkce: true,
 
   parseTokenResponse(raw) {
@@ -52,4 +52,4 @@ export const atlassianProvider: OAuthProvider = {
   },
 };
 
-registerProvider("atlassian", () => atlassianProvider);
+registerProvider('atlassian', () => atlassianProvider);

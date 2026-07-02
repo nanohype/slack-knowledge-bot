@@ -6,9 +6,9 @@
 // `refresh_token`; the refresh path in refresh.ts reuses the previous
 // one when missing.
 
-import type { OAuthProvider, TokenGrant } from "./types.js";
-import { registerProvider } from "./registry.js";
-import { expiresAtFromExpiresIn } from "./shared.js";
+import type { OAuthProvider, TokenGrant } from './types.js';
+import { registerProvider } from './registry.js';
+import { expiresAtFromExpiresIn } from './shared.js';
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -31,24 +31,24 @@ function parse(raw: unknown, previous?: TokenGrant): TokenGrant {
 }
 
 export const googleProvider: OAuthProvider = {
-  name: "google",
+  name: 'google',
   authUrl:
-    "https://accounts.google.com/o/oauth2/v2/auth" +
-    "?response_type=code" +
-    "&access_type=offline" +
-    "&prompt=consent" +
-    "&include_granted_scopes=true" +
-    "&client_id={client_id}" +
-    "&redirect_uri={redirect_uri}" +
-    "&scope={scope}" +
-    "&state={state}" +
-    "&code_challenge={code_challenge}" +
-    "&code_challenge_method={code_challenge_method}",
-  tokenUrl: "https://oauth2.googleapis.com/token",
-  revokeUrl: "https://oauth2.googleapis.com/revoke",
+    'https://accounts.google.com/o/oauth2/v2/auth' +
+    '?response_type=code' +
+    '&access_type=offline' +
+    '&prompt=consent' +
+    '&include_granted_scopes=true' +
+    '&client_id={client_id}' +
+    '&redirect_uri={redirect_uri}' +
+    '&scope={scope}' +
+    '&state={state}' +
+    '&code_challenge={code_challenge}' +
+    '&code_challenge_method={code_challenge_method}',
+  tokenUrl: 'https://oauth2.googleapis.com/token',
+  revokeUrl: 'https://oauth2.googleapis.com/revoke',
   defaultScopes: [
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly',
   ],
   usePkce: true,
 
@@ -61,4 +61,4 @@ export const googleProvider: OAuthProvider = {
   },
 };
 
-registerProvider("google", () => googleProvider);
+registerProvider('google', () => googleProvider);

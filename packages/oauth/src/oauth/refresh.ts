@@ -9,15 +9,15 @@
 // grant, emit a revocation event with reason `refresh-failed`, and
 // return null so the next call forces re-auth.
 
-import { errorMessage } from "./errors.js";
-import { logger } from "./logger.js";
+import { errorMessage } from './errors.js';
+import { logger } from './logger.js';
 import type {
   ClientCredentials,
   OAuthProvider,
   RevocationEmitter,
   TokenGrant,
   TokenStorage,
-} from "./types.js";
+} from './types.js';
 
 /** Token-endpoint timeout. A slow provider must not tie up the event loop. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -98,7 +98,7 @@ export class TokenRefresher {
     const creds = this.credentials[provider];
 
     if (!adapter || !creds) {
-      logger.warn("refresh aborted — provider not configured", { provider });
+      logger.warn('refresh aborted — provider not configured', { provider });
       return null;
     }
     if (!previous.refreshToken) {
@@ -106,40 +106,40 @@ export class TokenRefresher {
       return previous;
     }
 
-    const style = adapter.tokenAuthStyle ?? "body";
+    const style = adapter.tokenAuthStyle ?? 'body';
     const body =
-      style === "basic"
+      style === 'basic'
         ? new URLSearchParams({
-            grant_type: "refresh_token",
+            grant_type: 'refresh_token',
             refresh_token: previous.refreshToken,
           })
         : new URLSearchParams({
-            grant_type: "refresh_token",
+            grant_type: 'refresh_token',
             refresh_token: previous.refreshToken,
             client_id: creds.clientId,
             client_secret: creds.clientSecret,
           });
     const extraHeaders: Record<string, string> =
-      style === "basic"
+      style === 'basic'
         ? {
-            authorization: `Basic ${Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString("base64")}`,
+            authorization: `Basic ${Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64')}`,
           }
         : {};
 
     let response: Response;
     try {
       response = await this.fetch(adapter.tokenUrl, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json",
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
           ...extraHeaders,
         },
         body,
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
     } catch (err) {
-      logger.warn("refresh network error", {
+      logger.warn('refresh network error', {
         provider,
         userId,
         error: errorMessage(err),
@@ -149,7 +149,7 @@ export class TokenRefresher {
     }
 
     if (!response.ok) {
-      logger.warn("refresh rejected", {
+      logger.warn('refresh rejected', {
         provider,
         userId,
         status: response.status,
@@ -162,7 +162,7 @@ export class TokenRefresher {
     try {
       raw = await response.json();
     } catch {
-      logger.warn("refresh response not JSON", { provider, userId });
+      logger.warn('refresh response not JSON', { provider, userId });
       await this.purgeAndEmit(userId, provider);
       return null;
     }
@@ -185,7 +185,7 @@ export class TokenRefresher {
     try {
       await this.deps.storage.delete(userId, provider);
     } catch (err) {
-      logger.warn("storage delete failed after refresh failure", {
+      logger.warn('storage delete failed after refresh failure', {
         provider,
         userId,
         error: errorMessage(err),
@@ -193,9 +193,9 @@ export class TokenRefresher {
     }
     if (this.deps.emitter) {
       try {
-        await this.deps.emitter.emit({ userId, provider, reason: "refresh-failed" });
+        await this.deps.emitter.emit({ userId, provider, reason: 'refresh-failed' });
       } catch (err) {
-        logger.warn("revocation emit failed", { provider, userId, error: errorMessage(err) });
+        logger.warn('revocation emit failed', { provider, userId, error: errorMessage(err) });
       }
     }
   }

@@ -4,11 +4,11 @@
 // revocation endpoint (if any), unconditional storage delete, and a
 // revocation event with reason `user`.
 
-import { UnauthenticatedError, UnknownProviderError, errorMessage } from "../errors.js";
-import { logger } from "../logger.js";
-import type { OAuthProvider, OAuthRouterConfig, RequestHandler } from "../types.js";
-import { mapHandlerError } from "./errorMapping.js";
-import { FETCH_TIMEOUT_MS, extractProvider } from "./shared.js";
+import { UnauthenticatedError, UnknownProviderError, errorMessage } from '../errors.js';
+import { logger } from '../logger.js';
+import type { OAuthProvider, OAuthRouterConfig, RequestHandler } from '../types.js';
+import { mapHandlerError } from './errorMapping.js';
+import { FETCH_TIMEOUT_MS, extractProvider } from './shared.js';
 
 export interface RevokeDeps {
   fetchImpl?: typeof fetch;
@@ -22,7 +22,7 @@ export function createRevokeHandler(
 
   return async (req) => {
     try {
-      const providerName = extractProvider(req.url, "revoke");
+      const providerName = extractProvider(req.url, 'revoke');
       const adapter: OAuthProvider | undefined = config.providers[providerName];
       if (!adapter) throw new UnknownProviderError(providerName);
 
@@ -34,24 +34,24 @@ export function createRevokeHandler(
         const body = new URLSearchParams({ token: existing.accessToken });
         const creds = config.clientCredentials[providerName];
         if (creds) {
-          body.set("client_id", creds.clientId);
-          body.set("client_secret", creds.clientSecret);
+          body.set('client_id', creds.clientId);
+          body.set('client_secret', creds.clientSecret);
         }
         try {
           const response = await fetchImpl(adapter.revokeUrl, {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
             body,
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           });
           if (!response.ok) {
-            logger.warn("provider revoke returned non-2xx", {
+            logger.warn('provider revoke returned non-2xx', {
               provider: providerName,
               status: response.status,
             });
           }
         } catch (err) {
-          logger.warn("provider revoke network error", {
+          logger.warn('provider revoke network error', {
             provider: providerName,
             error: errorMessage(err),
           });
@@ -62,9 +62,9 @@ export function createRevokeHandler(
 
       if (config.revocationEmitter) {
         try {
-          await config.revocationEmitter.emit({ userId, provider: providerName, reason: "user" });
+          await config.revocationEmitter.emit({ userId, provider: providerName, reason: 'user' });
         } catch (err) {
-          logger.warn("revocation emit failed", {
+          logger.warn('revocation emit failed', {
             provider: providerName,
             error: errorMessage(err),
           });
@@ -73,7 +73,7 @@ export function createRevokeHandler(
 
       return new Response(null, { status: 204 });
     } catch (err) {
-      return mapHandlerError(err, "revoke");
+      return mapHandlerError(err, 'revoke');
     }
   };
 }

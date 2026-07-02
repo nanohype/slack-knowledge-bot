@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from 'vitest';
 import {
   createRateLimiter,
   type RateLimiterRedisPort,
   type RedisPipelinePort,
-} from "./redis-limiter.js";
+} from './redis-limiter.js';
 
 /**
  * Build a fake ioredis pipeline. Each `exec` call returns the next entry
@@ -19,7 +19,7 @@ function buildRedis(execResults: Array<Array<[Error | null, unknown]> | null | E
     expire: vi.fn(() => pipeline),
     exec: vi.fn(async () => {
       const next = queue.shift();
-      if (next === undefined) throw new Error("exec called more times than configured");
+      if (next === undefined) throw new Error('exec called more times than configured');
       if (next instanceof Error) throw next;
       return next;
     }),
@@ -32,8 +32,8 @@ function buildRedis(execResults: Array<Array<[Error | null, unknown]> | null | E
 
 const NOW = 1_700_000_000_000;
 
-describe("createRateLimiter", () => {
-  it("allows when user and workspace are under limit and writes the request", async () => {
+describe('createRateLimiter', () => {
+  it('allows when user and workspace are under limit and writes the request', async () => {
     const { redis, pipeline } = buildRedis([
       [
         [null, 0],
@@ -54,25 +54,25 @@ describe("createRateLimiter", () => {
       workspacePerHour: 500,
       now: () => NOW,
     });
-    const result = await limiter.check("U123", "W456");
+    const result = await limiter.check('U123', 'W456');
     expect(result).toEqual({
       allowed: true,
       remaining: 16,
       resetAt: NOW + 60 * 60 * 1000,
     });
     expect(pipeline.zadd).toHaveBeenCalledWith(
-      "ratelimit:user:U123",
+      'ratelimit:user:U123',
       NOW,
       expect.stringMatching(/^1700000000000-/),
     );
     expect(pipeline.zadd).toHaveBeenCalledWith(
-      "ratelimit:workspace:W456",
+      'ratelimit:workspace:W456',
       NOW,
       expect.stringMatching(/^1700000000000-/),
     );
   });
 
-  it("blocks when the per-user count is at the limit", async () => {
+  it('blocks when the per-user count is at the limit', async () => {
     const { redis, pipeline } = buildRedis([
       [
         [null, 0],
@@ -87,18 +87,18 @@ describe("createRateLimiter", () => {
       workspacePerHour: 500,
       now: () => NOW,
     });
-    const result = await limiter.check("U123", "W456");
+    const result = await limiter.check('U123', 'W456');
     expect(result).toEqual({
       allowed: false,
       remaining: 0,
       resetAt: NOW + 60 * 60 * 1000,
-      limitType: "user",
+      limitType: 'user',
     });
     // Must NOT write a new entry when blocked.
     expect(pipeline.zadd).not.toHaveBeenCalled();
   });
 
-  it("blocks when the per-workspace count is at the limit even if the user is under", async () => {
+  it('blocks when the per-workspace count is at the limit even if the user is under', async () => {
     const { redis } = buildRedis([
       [
         [null, 0],
@@ -113,28 +113,28 @@ describe("createRateLimiter", () => {
       workspacePerHour: 500,
       now: () => NOW,
     });
-    const result = await limiter.check("U123", "W456");
+    const result = await limiter.check('U123', 'W456');
     expect(result.allowed).toBe(false);
-    expect(result.limitType).toBe("workspace");
+    expect(result.limitType).toBe('workspace');
     expect(result.remaining).toBe(0);
   });
 
-  it("fails open when exec throws (Redis unreachable)", async () => {
-    const { redis, pipeline } = buildRedis([new Error("ETIMEDOUT")]);
+  it('fails open when exec throws (Redis unreachable)', async () => {
+    const { redis, pipeline } = buildRedis([new Error('ETIMEDOUT')]);
     const limiter = createRateLimiter({
       redis,
       userPerHour: 20,
       workspacePerHour: 500,
       now: () => NOW,
     });
-    const result = await limiter.check("U123", "W456");
+    const result = await limiter.check('U123', 'W456');
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(-1);
     // Fail-open must not attempt a write.
     expect(pipeline.zadd).not.toHaveBeenCalled();
   });
 
-  it("fails open when exec returns null (pipeline aborted)", async () => {
+  it('fails open when exec returns null (pipeline aborted)', async () => {
     const { redis } = buildRedis([null]);
     const limiter = createRateLimiter({
       redis,
@@ -142,7 +142,7 @@ describe("createRateLimiter", () => {
       workspacePerHour: 500,
       now: () => NOW,
     });
-    const result = await limiter.check("U123", "W456");
+    const result = await limiter.check('U123', 'W456');
     expect(result.allowed).toBe(true);
     expect(result.remaining).toBe(-1);
   });

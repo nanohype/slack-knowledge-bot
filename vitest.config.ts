@@ -1,26 +1,26 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     globals: true,
-    environment: "node",
-    include: ["src/**/*.test.ts"],
-    setupFiles: ["src/test-setup.ts"],
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    setupFiles: ['src/test-setup.ts'],
     coverage: {
-      provider: "v8",
-      include: ["src/**/*.ts"],
+      provider: 'v8',
+      include: ['src/**/*.ts'],
       exclude: [
-        "src/index.ts", // bootstrap; only verifiable in real-Slack integration
-        "src/bin/audit-consumer.ts", // KEDA-scaled entry binary; process/signal wiring, only verifiable in real integration
-        "src/redis.ts", // ioredis client factory; connects on construction, only verifiable against a real Redis
-        "src/connectors/types.ts", // type declarations only
-        "src/scripts/**", // one-off dev seeders; run via `kubectl exec`, not in-app
-        "src/rag/backends/pgvector-schema.ts", // DDL bootstrap; exercised by RDS at deploy time
-        "src/oauth/router.ts", // OAuth wiring; exercised by the real provider handshake (integration only)
-        "src/oauth/http.ts", // node:http ↔ Web Request bridge; covered end-to-end by smoke test
-        "src/runtime/**", // vendored from nanohype library/runtime — unit-tested upstream; byte-identity enforced by scripts/sync-runtime.mjs --check
-        "src/test-setup.ts",
-        "src/**/*.test.ts",
+        'src/index.ts', // bootstrap; only verifiable in real-Slack integration
+        'src/bin/audit-consumer.ts', // KEDA-scaled entry binary; process/signal wiring, only verifiable in real integration
+        'src/redis.ts', // ioredis client factory; connects on construction, only verifiable against a real Redis
+        'src/connectors/types.ts', // type declarations only
+        'src/scripts/**', // one-off dev seeders; run via `kubectl exec`, not in-app
+        'src/rag/backends/pgvector-schema.ts', // DDL bootstrap; exercised by RDS at deploy time
+        'src/oauth/router.ts', // OAuth wiring; exercised by the real provider handshake (integration only)
+        'src/oauth/http.ts', // node:http ↔ Web Request bridge; covered end-to-end by smoke test
+        'src/runtime/**', // vendored from nanohype library/runtime — unit-tested upstream; byte-identity enforced by scripts/sync-runtime.mjs --check
+        'src/test-setup.ts',
+        'src/**/*.test.ts',
       ],
       thresholds: {
         branches: 60,

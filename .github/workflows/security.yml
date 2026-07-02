@@ -7,7 +7,7 @@ on:
     branches: [main]
   schedule:
     # Weekly Tuesday 06:00 UTC — catches new CVEs even when no PRs land.
-    - cron: "0 6 * * 2"
+    - cron: '0 6 * * 2'
 
 permissions:
   contents: read
@@ -54,7 +54,7 @@ jobs:
           # the build. This keeps the gate to HIGH/CRITICAL while still
           # surfacing lower-severity findings in the SARIF for code-scanning.
           limit-severities-for-sarif: true
-          exit-code: "1"
+          exit-code: '1'
           format: sarif
           output: trivy-config.sarif
       - uses: github/codeql-action/upload-sarif@v3
@@ -81,11 +81,11 @@ jobs:
           # Gate on HIGH/CRITICAL only (see trivy-config note); lower-severity
           # CVEs still upload to code-scanning as warnings.
           limit-severities-for-sarif: true
-          exit-code: "1"
+          exit-code: '1'
           ignore-unfixed: true
           format: sarif
           output: trivy-fs.sarif
-          skip-dirs: "node_modules,packages/oauth/node_modules"
+          skip-dirs: 'node_modules,packages/oauth/node_modules'
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:

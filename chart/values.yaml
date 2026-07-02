@@ -2,7 +2,7 @@
 
 image:
   repository: ghcr.io/nanohype/slack-knowledge-bot
-  tag: "" # pinned per-env
+  tag: '' # pinned per-env
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -79,7 +79,7 @@ ingress:
     issuer: letsencrypt-prod
   hosts:
     # Set per-env in values-{env}.yaml
-    - host: ""
+    - host: ''
       paths:
         - path: /health
           pathType: Exact
@@ -94,9 +94,9 @@ externalSecret:
   # Source secret in AWS Secrets Manager — composed per-env as
   # slack-knowledge-bot/<env>/app-secrets by the platform reconciler. The chart references
   # this via the externalsecret template's `data` keys.
-  remoteRefSecret: "" # set per-env (slack-knowledge-bot/<env>/app-secrets)
+  remoteRefSecret: '' # set per-env (slack-knowledge-bot/<env>/app-secrets)
   # RDS master credentials secret name (provisioned by landing-zone rag component)
-  dbCredentialsSecret: "" # set per-env (slack-knowledge-bot/<env>/db-credentials)
+  dbCredentialsSecret: '' # set per-env (slack-knowledge-bot/<env>/db-credentials)
 
 prometheusRule:
   # Ships SLO recording rules + burn-rate alerts to a Prometheus Operator
@@ -222,10 +222,10 @@ env:
   # Verify the Aurora server cert against the RDS global CA baked into the image
   # (certs/rds-global-bundle.pem). Authenticated-encrypted DB link, not just
   # encrypted. Override to "false" only for a chain-less local Postgres.
-  PG_SSL_REJECT_UNAUTHORIZED: "true"
-  RATE_LIMIT_USER_PER_HOUR: "20"
-  RATE_LIMIT_WORKSPACE_PER_HOUR: "500"
-  STALE_DOC_THRESHOLD_DAYS: "90"
+  PG_SSL_REJECT_UNAUTHORIZED: 'true'
+  RATE_LIMIT_USER_PER_HOUR: '20'
+  RATE_LIMIT_WORKSPACE_PER_HOUR: '500'
+  STALE_DOC_THRESHOLD_DAYS: '90'
   TOKEN_STORE_ENCRYPTION_CONTEXT: slack-knowledge-bot-token-store
   NODE_ENV: production
   # OTel — exports to the grafana-agent OTLP receiver in the monitoring namespace
@@ -235,9 +235,9 @@ env:
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_TRACES_SAMPLER: always_on
   OTEL_METRICS_EXPORTER: otlp
-  OTEL_METRIC_EXPORT_INTERVAL: "60000"
+  OTEL_METRIC_EXPORT_INTERVAL: '60000'
   # Resource attrs — agents.tenant/agents.platform required by PLATFORM_TENANT_CONTRACT
-  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=slack-knowledge-bot,service.version=0.1.0,agents.tenant=protohype,agents.platform=slack-knowledge-bot"
+  OTEL_RESOURCE_ATTRIBUTES: 'service.namespace=slack-knowledge-bot,service.version=0.1.0,agents.tenant=protohype,agents.platform=slack-knowledge-bot'
 
 # Per-tenant infrastructure references — populated by per-env values from
 # the landing-zone slack-knowledge-bot-platform component's outputs. Empty at the chart
@@ -245,22 +245,22 @@ env:
 # mocks).
 tenantInfra:
   # DynamoDB tables (3) — slack-knowledge-bot-platform: aws_dynamodb_table.{tokens,audit,identity_cache}.name
-  dynamodbTableTokens: ""
-  dynamodbTableAudit: ""
-  dynamodbTableIdentityCache: ""
+  dynamodbTableTokens: ''
+  dynamodbTableAudit: ''
+  dynamodbTableIdentityCache: ''
   # SQS audit queue + DLQ — slack-knowledge-bot-platform: aws_sqs_queue.{audit,audit_dlq}.url
-  sqsAuditQueueUrl: ""
-  sqsAuditDlqUrl: ""
+  sqsAuditQueueUrl: ''
+  sqsAuditDlqUrl: ''
   # ElastiCache Redis endpoint — slack-knowledge-bot-platform: aws_elasticache_replication_group.this.primary_endpoint_address
-  redisUrl: ""
+  redisUrl: ''
   # KMS key for token envelope encryption — slack-knowledge-bot-platform: aws_kms_key.token_store.id
-  kmsKeyId: ""
+  kmsKeyId: ''
   # Aurora Serverless v2 (pgvector) endpoint — slack-knowledge-bot-platform: module.aurora.cluster_endpoint
-  pgHost: ""
-  pgPort: "5432"
+  pgHost: ''
+  pgPort: '5432'
   pgDatabase: slack_knowledge_bot
   # S3 audit-archive bucket — slack-knowledge-bot-platform: aws_s3_bucket.audit.bucket
-  auditBucket: ""
+  auditBucket: ''
 
 nodeSelector: {}
 tolerations: []

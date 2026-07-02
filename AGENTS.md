@@ -40,7 +40,7 @@ metadata:
   namespace: tenants-protohype
 spec:
   platformRef: { name: slack-knowledge-bot }
-  monthlyUsd: "5000" # kill-switch fires at 120% (USD 6000)
+  monthlyUsd: '5000' # kill-switch fires at 120% (USD 6000)
   alertThresholdsPercent: [50, 80, 100]
   killSwitchEnabled: true
 ---

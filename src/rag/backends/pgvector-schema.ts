@@ -16,7 +16,7 @@
  * the bedrock-runtime embedding model returns. Titan Embeddings v2
  * defaults to 1024.
  */
-import type { Pool } from "pg";
+import type { Pool } from 'pg';
 
 export interface InitSchemaConfig {
   pool: Pool;
@@ -26,13 +26,13 @@ export interface InitSchemaConfig {
 export async function initSchema(deps: InitSchemaConfig): Promise<void> {
   const client = await deps.pool.connect();
   try {
-    await client.query("BEGIN");
-    await client.query("SET LOCAL statement_timeout = 0");
+    await client.query('BEGIN');
+    await client.query('SET LOCAL statement_timeout = 0');
 
     // `vector` extension provides the VECTOR type + `<=>` / `<#>` / `<->`
     // distance operators. Available on RDS Postgres 15+ and Aurora
     // Postgres 15+ out of the box.
-    await client.query("CREATE EXTENSION IF NOT EXISTS vector");
+    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
 
     // `chunks` table. A document chunks into many overlapping segments, so the
     // key is (doc_id, chunk_index) — a plain `doc_id PRIMARY KEY` would cap each
@@ -68,11 +68,11 @@ export async function initSchema(deps: InitSchemaConfig): Promise<void> {
     );
 
     // GIN over the generated tsvector for the BM25 path.
-    await client.query("CREATE INDEX IF NOT EXISTS chunks_fts_idx ON chunks USING GIN (fts)");
+    await client.query('CREATE INDEX IF NOT EXISTS chunks_fts_idx ON chunks USING GIN (fts)');
 
-    await client.query("COMMIT");
+    await client.query('COMMIT');
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();

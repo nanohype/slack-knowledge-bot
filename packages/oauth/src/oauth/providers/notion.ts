@@ -6,8 +6,8 @@
 // PKCE by default adds meaningful resistance to code-interception
 // attacks even when the redirect is on HTTPS.
 
-import type { OAuthProvider, TokenGrant } from "./types.js";
-import { registerProvider } from "./registry.js";
+import type { OAuthProvider, TokenGrant } from './types.js';
+import { registerProvider } from './registry.js';
 
 interface NotionTokenResponse {
   access_token: string;
@@ -20,23 +20,23 @@ interface NotionTokenResponse {
 }
 
 export const notionProvider: OAuthProvider = {
-  name: "notion",
+  name: 'notion',
   authUrl:
-    "https://api.notion.com/v1/oauth/authorize" +
-    "?owner=user" +
-    "&response_type=code" +
-    "&client_id={client_id}" +
-    "&redirect_uri={redirect_uri}" +
-    "&state={state}" +
-    "&code_challenge={code_challenge}" +
-    "&code_challenge_method={code_challenge_method}",
-  tokenUrl: "https://api.notion.com/v1/oauth/token",
+    'https://api.notion.com/v1/oauth/authorize' +
+    '?owner=user' +
+    '&response_type=code' +
+    '&client_id={client_id}' +
+    '&redirect_uri={redirect_uri}' +
+    '&state={state}' +
+    '&code_challenge={code_challenge}' +
+    '&code_challenge_method={code_challenge_method}',
+  tokenUrl: 'https://api.notion.com/v1/oauth/token',
   defaultScopes: [],
   usePkce: true,
   // Notion requires HTTP Basic auth on the token endpoint; putting
   // `client_id`+`client_secret` in the form body is rejected with 401.
   // See https://developers.notion.com/docs/authorization.
-  tokenAuthStyle: "basic",
+  tokenAuthStyle: 'basic',
 
   parseTokenResponse(raw) {
     const r = raw as NotionTokenResponse;
@@ -48,4 +48,4 @@ export const notionProvider: OAuthProvider = {
   },
 };
 
-registerProvider("notion", () => notionProvider);
+registerProvider('notion', () => notionProvider);

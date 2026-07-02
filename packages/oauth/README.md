@@ -20,13 +20,13 @@ import {
   notionProvider,
   googleProvider,
   InMemoryTokenStorage,
-} from "slack-knowledge-bot-oauth";
+} from 'slack-knowledge-bot-oauth';
 
 const router = createOAuthRouter({
   providers: { notion: notionProvider, google: googleProvider },
   storage: new InMemoryTokenStorage(),
   stateSigningSecret: process.env.OAUTH_STATE_SIGNING_SECRET!,
-  resolveUserId: async (req) => req.headers.get("x-user-id"),
+  resolveUserId: async (req) => req.headers.get('x-user-id'),
   clientCredentials: {
     notion: {
       clientId: process.env.NOTION_CLIENT_ID!,
@@ -42,7 +42,7 @@ const router = createOAuthRouter({
 });
 
 // The one call most downstream code makes:
-const token = await router.getValidToken(userId, "notion");
+const token = await router.getValidToken(userId, 'notion');
 ```
 
 ### Wiring to a framework
@@ -50,12 +50,12 @@ const token = await router.getValidToken(userId, "notion");
 The handlers take a Web-standard `Request` and return a `Response`. For Hono:
 
 ```ts
-import { Hono } from "hono";
+import { Hono } from 'hono';
 const app = new Hono();
-app.get("/oauth/:provider/start", (c) => router.handlers.start(c.req.raw));
-app.get("/oauth/:provider/callback", (c) => router.handlers.callback(c.req.raw));
-app.post("/oauth/:provider/refresh", (c) => router.handlers.refresh(c.req.raw));
-app.post("/oauth/:provider/revoke", (c) => router.handlers.revoke(c.req.raw));
+app.get('/oauth/:provider/start', (c) => router.handlers.start(c.req.raw));
+app.get('/oauth/:provider/callback', (c) => router.handlers.callback(c.req.raw));
+app.post('/oauth/:provider/refresh', (c) => router.handlers.refresh(c.req.raw));
+app.post('/oauth/:provider/revoke', (c) => router.handlers.revoke(c.req.raw));
 ```
 
 For Express, adapt via `@whatwg-node/server` or similar — the module does not depend on any framework.

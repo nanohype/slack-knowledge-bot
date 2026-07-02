@@ -18,13 +18,13 @@
  * hook. Tests use `aws-sdk-client-mock`; production builds one client
  * once in `src/index.ts` and threads it through.
  */
-import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import { createHash } from "node:crypto";
-import { logger } from "../logger.js";
-import { scrubPii } from "./pii-scrubber.js";
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { createHash } from 'node:crypto';
+import { logger } from '../logger.js';
+import { scrubPii } from './pii-scrubber.js';
 
 export interface QueryAuditEvent {
-  eventType: "query";
+  eventType: 'query';
   traceId: string;
   userId: string;
   slackUserId: string;
@@ -38,7 +38,7 @@ export interface QueryAuditEvent {
   latencyMs: number;
   timestamp: string;
   sources: Array<{
-    source: "notion" | "confluence" | "drive";
+    source: 'notion' | 'confluence' | 'drive';
     docId: string;
     url: string;
     lastModified: string;
@@ -47,11 +47,11 @@ export interface QueryAuditEvent {
 }
 
 export interface RevocationAuditEvent {
-  eventType: "revocation";
+  eventType: 'revocation';
   traceId?: string;
   userId: string;
   provider: string;
-  reason: "user" | "offboarding" | "refresh-failed";
+  reason: 'user' | 'offboarding' | 'refresh-failed';
   timestamp: string;
 }
 
@@ -68,7 +68,7 @@ export interface AuditLoggerConfig {
 export interface AuditLogger {
   emitQuery(event: QueryAuditEvent): Promise<void>;
   emitRevocation(
-    event: Omit<RevocationAuditEvent, "eventType" | "timestamp"> & { timestamp?: string },
+    event: Omit<RevocationAuditEvent, 'eventType' | 'timestamp'> & { timestamp?: string },
   ): Promise<void>;
 }
 
@@ -79,10 +79,10 @@ export interface AuditLogger {
 // still tuple-deterministic so replays dedupe.
 function dedupId(event: AuditEvent): string {
   const raw =
-    event.eventType === "query"
+    event.eventType === 'query'
       ? `${event.userId}|${event.queryHash}|${event.timestamp}`
       : `${event.userId}|${event.provider}|${event.reason}|${event.timestamp}`;
-  return createHash("sha256").update(raw).digest("hex");
+  return createHash('sha256').update(raw).digest('hex');
 }
 
 export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
@@ -91,7 +91,7 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
 
   async function emit(event: AuditEvent): Promise<void> {
     const safeEvent =
-      event.eventType === "query"
+      event.eventType === 'query'
         ? { ...event, scrubbedQuery: scrubPii(event.scrubbedQuery) }
         : event;
     try {
@@ -103,12 +103,12 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
           MessageDeduplicationId: dedupId(event),
         }),
       );
-      logger.debug({ userId: event.userId, kind: event.eventType }, "audit event emitted");
+      logger.debug({ userId: event.userId, kind: event.eventType }, 'audit event emitted');
     } catch (err) {
-      counter("audit.primary_fail");
+      counter('audit.primary_fail');
       logger.error(
         { err, userId: event.userId, kind: event.eventType },
-        "failed to emit audit event to SQS",
+        'failed to emit audit event to SQS',
       );
       try {
         // DLQ is FIFO too (required when the main queue is FIFO), so it
@@ -122,10 +122,10 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
             MessageDeduplicationId: dedupId(event),
           }),
         );
-        counter("audit.dlq_write");
+        counter('audit.dlq_write');
       } catch (dlqErr) {
-        counter("audit.total_loss");
-        logger.error({ dlqErr, userId: event.userId }, "also failed to write to audit DLQ");
+        counter('audit.total_loss');
+        logger.error({ dlqErr, userId: event.userId }, 'also failed to write to audit DLQ');
       }
     }
   }
@@ -136,7 +136,7 @@ export function createAuditLogger(deps: AuditLoggerConfig): AuditLogger {
     },
     async emitRevocation(event) {
       return emit({
-        eventType: "revocation",
+        eventType: 'revocation',
         timestamp: event.timestamp ?? new Date(now()).toISOString(),
         traceId: event.traceId,
         userId: event.userId,
@@ -164,23 +164,23 @@ export function buildQueryAuditEvent(
     redactedDocCount: number;
     answerText: string;
     latencyMs: number;
-    sources: QueryAuditEvent["sources"];
+    sources: QueryAuditEvent['sources'];
   },
   now: () => number = () => Date.now(),
 ): QueryAuditEvent {
   const scrubbedQuery = scrubPii(params.rawQuery);
   return {
-    eventType: "query",
+    eventType: 'query',
     traceId: params.traceId,
     userId: params.userId,
     slackUserId: params.slackUserId,
     channelId: params.channelId,
-    queryHash: createHash("sha256").update(scrubbedQuery).digest("hex"),
+    queryHash: createHash('sha256').update(scrubbedQuery).digest('hex'),
     scrubbedQuery,
     retrievedDocIds: params.retrievedDocIds,
     accessibleDocIds: params.accessibleDocIds,
     redactedDocCount: params.redactedDocCount,
-    answerHash: createHash("sha256").update(params.answerText).digest("hex"),
+    answerHash: createHash('sha256').update(params.answerText).digest('hex'),
     latencyMs: params.latencyMs,
     timestamp: new Date(now()).toISOString(),
     sources: params.sources,

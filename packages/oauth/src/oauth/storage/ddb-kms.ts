@@ -32,14 +32,14 @@ import {
   QueryCommand,
   type AttributeValue,
   type QueryCommandOutput,
-} from "@aws-sdk/client-dynamodb";
-import { DecryptCommand, GenerateDataKeyCommand, KMSClient } from "@aws-sdk/client-kms";
-import { NodeHttpHandler } from "@smithy/node-http-handler";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+} from '@aws-sdk/client-dynamodb';
+import { DecryptCommand, GenerateDataKeyCommand, KMSClient } from '@aws-sdk/client-kms';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-import type { TokenGrant, TokenStorage } from "./types.js";
+import type { TokenGrant, TokenStorage } from './types.js';
 
-const ENCRYPTION_PURPOSE = "oauth-token";
+const ENCRYPTION_PURPOSE = 'oauth-token';
 const TWO_YEARS_SECONDS = 2 * 365 * 24 * 3600;
 
 // Envelope frame constants.
@@ -128,10 +128,10 @@ export class DDBKmsTokenStorage implements TokenStorage {
       const response: QueryCommandOutput = await this.ddb.send(
         new QueryCommand({
           TableName: this.tableName,
-          KeyConditionExpression: "userId = :u",
-          ExpressionAttributeValues: { ":u": { S: userId } },
-          ProjectionExpression: "userId, #p",
-          ExpressionAttributeNames: { "#p": "provider" },
+          KeyConditionExpression: 'userId = :u',
+          ExpressionAttributeValues: { ':u': { S: userId } },
+          ProjectionExpression: 'userId, #p',
+          ExpressionAttributeNames: { '#p': 'provider' },
           ExclusiveStartKey: exclusiveStartKey,
         }),
       );
@@ -161,26 +161,26 @@ export class DDBKmsTokenStorage implements TokenStorage {
     const dataKeyRes = await this.kms.send(
       new GenerateDataKeyCommand({
         KeyId: this.keyId,
-        KeySpec: "AES_256",
+        KeySpec: 'AES_256',
         EncryptionContext: encryptionContext,
       }),
     );
     if (!dataKeyRes.Plaintext || !dataKeyRes.CiphertextBlob) {
-      throw new Error("KMS GenerateDataKey returned no key material");
+      throw new Error('KMS GenerateDataKey returned no key material');
     }
     const plainKey = Buffer.from(dataKeyRes.Plaintext);
     const wrappedKey = Buffer.from(dataKeyRes.CiphertextBlob);
 
     try {
       const iv = randomBytes(IV_BYTES);
-      const cipher = createCipheriv("aes-256-gcm", plainKey, iv);
-      const plaintext = Buffer.from(JSON.stringify(grant), "utf-8");
+      const cipher = createCipheriv('aes-256-gcm', plainKey, iv);
+      const plaintext = Buffer.from(JSON.stringify(grant), 'utf-8');
       const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
       const tag = cipher.getAuthTag();
 
       // Frame: [ver(1) | wrappedKeyLen(2 BE) | wrappedKey | iv(12) | tag(16) | ct]
       if (wrappedKey.length > 0xffff) {
-        throw new Error("wrapped data key exceeds 16-bit length");
+        throw new Error('wrapped data key exceeds 16-bit length');
       }
       const header = Buffer.alloc(3);
       header.writeUInt8(FRAME_VERSION, 0);
@@ -200,7 +200,7 @@ export class DDBKmsTokenStorage implements TokenStorage {
     const wrappedKeyLen = blob.readUInt16BE(1);
     let offset = 3;
     if (blob.length < offset + wrappedKeyLen + IV_BYTES + TAG_BYTES) {
-      throw new Error("token storage: truncated envelope");
+      throw new Error('token storage: truncated envelope');
     }
     const wrappedKey = blob.subarray(offset, offset + wrappedKeyLen);
     offset += wrappedKeyLen;
@@ -221,14 +221,14 @@ export class DDBKmsTokenStorage implements TokenStorage {
       }),
     );
     if (!unwrap.Plaintext) {
-      throw new Error("KMS Decrypt returned no plaintext");
+      throw new Error('KMS Decrypt returned no plaintext');
     }
     const plainKey = Buffer.from(unwrap.Plaintext);
     try {
-      const decipher = createDecipheriv("aes-256-gcm", plainKey, iv);
+      const decipher = createDecipheriv('aes-256-gcm', plainKey, iv);
       decipher.setAuthTag(tag);
       const plaintext = Buffer.concat([decipher.update(ct), decipher.final()]);
-      return JSON.parse(plaintext.toString("utf-8")) as TokenGrant;
+      return JSON.parse(plaintext.toString('utf-8')) as TokenGrant;
     } finally {
       plainKey.fill(0);
     }

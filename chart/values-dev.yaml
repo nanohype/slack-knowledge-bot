@@ -19,7 +19,7 @@ externalSecret:
 
 env:
   NODE_ENV: production
-  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=slack-knowledge-bot,service.version=0.1.0,deployment.environment=dev,agents.tenant=protohype,agents.platform=slack-knowledge-bot"
+  OTEL_RESOURCE_ATTRIBUTES: 'service.namespace=slack-knowledge-bot,service.version=0.1.0,deployment.environment=dev,agents.tenant=protohype,agents.platform=slack-knowledge-bot'
 
 tenantInfra:
   # Fill the empties below from the landing-zone slack-knowledge-bot-platform dev
@@ -27,9 +27,9 @@ tenantInfra:
   dynamodbTableTokens: slack-knowledge-bot-dev-tokens
   dynamodbTableAudit: slack-knowledge-bot-dev-audit
   dynamodbTableIdentityCache: slack-knowledge-bot-dev-identity-cache
-  sqsAuditQueueUrl: ""
-  sqsAuditDlqUrl: ""
-  redisUrl: ""
-  kmsKeyId: ""
-  pgHost: ""
-  auditBucket: ""
+  sqsAuditQueueUrl: ''
+  sqsAuditDlqUrl: ''
+  redisUrl: ''
+  kmsKeyId: ''
+  pgHost: ''
+  auditBucket: ''

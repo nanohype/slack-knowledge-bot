@@ -17,24 +17,24 @@ import {
   type ResolveUserId,
   type RevocationEmitter,
   type TokenStorage,
-} from "slack-knowledge-bot-oauth";
-import type { AuditLogger } from "../audit/audit-logger.js";
-import { config } from "../config/index.js";
-import { trace } from "@opentelemetry/api";
-import { logger } from "../logger.js";
-import { verifyOAuthStartUrl } from "./url-token.js";
+} from 'slack-knowledge-bot-oauth';
+import type { AuditLogger } from '../audit/audit-logger.js';
+import { config } from '../config/index.js';
+import { trace } from '@opentelemetry/api';
+import { logger } from '../logger.js';
+import { verifyOAuthStartUrl } from './url-token.js';
 
-export const SUPPORTED_PROVIDERS = ["notion", "atlassian", "google"] as const;
+export const SUPPORTED_PROVIDERS = ['notion', 'atlassian', 'google'] as const;
 export type ProviderName = (typeof SUPPORTED_PROVIDERS)[number];
 
 /**
  * Map SlackKnowledgeBot's internal source names (as used on RetrievalHit.source) to
  * the OAuth provider name. Atlassian covers Confluence; Google covers Drive.
  */
-export const SOURCE_TO_PROVIDER: Record<"notion" | "confluence" | "drive", ProviderName> = {
-  notion: "notion",
-  confluence: "atlassian",
-  drive: "google",
+export const SOURCE_TO_PROVIDER: Record<'notion' | 'confluence' | 'drive', ProviderName> = {
+  notion: 'notion',
+  confluence: 'atlassian',
+  drive: 'google',
 };
 
 export interface SlackKnowledgeBotOAuthConfig {
@@ -69,23 +69,23 @@ const resolveUserId: ResolveUserId = async (req) => {
   const url = new URL(req.url);
   const provider = extractProvider(url);
   if (!provider) {
-    logger.warn({ path: url.pathname }, "resolveUserId: no provider in URL");
+    logger.warn({ path: url.pathname }, 'resolveUserId: no provider in URL');
     return null;
   }
 
-  const token = url.searchParams.get("t");
+  const token = url.searchParams.get('t');
   if (token) {
     const userId = verifyOAuthStartUrl(token, provider);
-    if (!userId) logger.warn({ provider }, "resolveUserId: signed /start token did not verify");
+    if (!userId) logger.warn({ provider }, 'resolveUserId: signed /start token did not verify');
     return userId;
   }
 
-  const cookie = req.headers.get("cookie") ?? "";
+  const cookie = req.headers.get('cookie') ?? '';
   const payload = readStatePayloadUnverified(cookie);
   if (!payload) {
     logger.warn(
       { provider, path: url.pathname, cookiePresent: cookie.length > 0, cookieLen: cookie.length },
-      "resolveUserId: state cookie missing or unparseable on callback",
+      'resolveUserId: state cookie missing or unparseable on callback',
     );
     return null;
   }
@@ -116,14 +116,14 @@ export function createSlackKnowledgeBotOAuth(
       const span = trace.getActiveSpan();
       const ctx = span?.spanContext();
       const traceId =
-        ctx && ctx.traceId && ctx.traceId !== "00000000000000000000000000000000"
+        ctx && ctx.traceId && ctx.traceId !== '00000000000000000000000000000000'
           ? ctx.traceId
           : undefined;
       try {
         await deps.auditLogger.emitRevocation({ ...event, traceId });
       } catch (err) {
         // Best effort — the logger already handles primary/DLQ failure.
-        logger.error({ err, event }, "revocation audit emission threw");
+        logger.error({ err, event }, 'revocation audit emission threw');
       }
     },
   };

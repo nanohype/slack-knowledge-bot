@@ -16,8 +16,8 @@
  * `::vector` in the query. This avoids hand-building binary VECTOR
  * wire format and works with any pg driver.
  */
-import type { RetrievalBackend } from "./types.js";
-import type { RetrievalHit } from "../../connectors/types.js";
+import type { RetrievalBackend } from './types.js';
+import type { RetrievalHit } from '../../connectors/types.js';
 
 export interface PgQueryPort {
   query<T = unknown>(text: string, values: unknown[]): Promise<{ rows: T[] }>;
@@ -63,20 +63,20 @@ export function createPgvectorBackend(deps: PgvectorBackendConfig): RetrievalBac
         `pgvector: embedding dim ${embedding.length} does not match configured ${deps.embeddingDim}`,
       );
     }
-    return `[${embedding.join(",")}]`;
+    return `[${embedding.join(',')}]`;
   }
 
   function mapRow(row: ChunkRow): RetrievalHit {
     return {
       docId: row.doc_id,
-      source: row.source as "notion" | "confluence" | "drive",
-      title: row.title ?? "",
-      url: row.source_url ?? "",
+      source: row.source as 'notion' | 'confluence' | 'drive',
+      title: row.title ?? '',
+      url: row.source_url ?? '',
       chunkText: row.chunk_text,
       lastModified:
         row.last_modified instanceof Date
           ? row.last_modified.toISOString()
-          : (row.last_modified ?? ""),
+          : (row.last_modified ?? ''),
       score: Number(row.score) || 0,
       accessVerified: false,
       wasRedacted: false,

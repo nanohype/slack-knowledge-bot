@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { requestContext } from "./context.js";
+import { describe, it, expect } from 'vitest';
+import { requestContext } from './context.js';
 
-describe("requestContext.run", () => {
+describe('requestContext.run', () => {
   it("returns the wrapped function's value (happy path)", async () => {
-    const result = await requestContext.run({}, async () => "ok");
-    expect(result).toBe("ok");
+    const result = await requestContext.run({}, async () => 'ok');
+    expect(result).toBe('ok');
   });
 
   it("propagates the wrapped function's rejection after ending the span", async () => {
@@ -13,15 +13,15 @@ describe("requestContext.run", () => {
     // does not swallow the error.
     await expect(
       requestContext.run({}, async () => {
-        throw new Error("boom");
+        throw new Error('boom');
       }),
-    ).rejects.toThrow("boom");
+    ).rejects.toThrow('boom');
   });
 
-  it("ignores the legacy traceId argument", async () => {
+  it('ignores the legacy traceId argument', async () => {
     // `requestContext.run` accepts the legacy `{traceId}` shape so callers
     // don't churn; the value is discarded because OTel owns trace IDs now.
-    const ok = await requestContext.run({ traceId: "legacy-ignored" }, async () => 42);
+    const ok = await requestContext.run({ traceId: 'legacy-ignored' }, async () => 42);
     expect(ok).toBe(42);
   });
 });

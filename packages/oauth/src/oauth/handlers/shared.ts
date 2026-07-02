@@ -1,7 +1,7 @@
 // ── Handler-shared helpers ───────────────────────────────────────────
 
-import { ConfigError, errorMessage, ProviderError } from "../errors.js";
-import type { OAuthProvider, OAuthRouterConfig } from "../types.js";
+import { ConfigError, errorMessage, ProviderError } from '../errors.js';
+import type { OAuthProvider, OAuthRouterConfig } from '../types.js';
 
 /** Default timeout for provider token/revoke endpoints. */
 export const FETCH_TIMEOUT_MS = 10_000;
@@ -14,7 +14,7 @@ export const FETCH_TIMEOUT_MS = 10_000;
  */
 export function extractProvider(url: string, action: string): string {
   const { pathname } = new URL(url);
-  const segments = pathname.split("/").filter(Boolean);
+  const segments = pathname.split('/').filter(Boolean);
   if (segments.length < 2) throw new ConfigError(`unroutable path: ${pathname}`);
   const last = segments[segments.length - 1];
   if (last !== action) throw new ConfigError(`expected action ${action} at end of ${pathname}`);
@@ -35,11 +35,11 @@ export function extractProvider(url: string, action: string): string {
  */
 export function extractReturnTo(url: string): string {
   const u = new URL(url);
-  const raw = u.searchParams.get("returnTo");
-  if (!raw) return "/";
-  if (!raw.startsWith("/")) return "/";
-  if (raw.startsWith("//")) return "/";
-  if (raw.startsWith("/\\")) return "/";
+  const raw = u.searchParams.get('returnTo');
+  if (!raw) return '/';
+  if (!raw.startsWith('/')) return '/';
+  if (raw.startsWith('//')) return '/';
+  if (raw.startsWith('/\\')) return '/';
   return raw;
 }
 
@@ -68,23 +68,23 @@ export async function postForm(
   let response: Response;
   try {
     response = await fetchImpl(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        accept: "application/json",
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
         ...(extraHeaders ?? {}),
       },
       body,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new ProviderError(provider, "network_error", errorMessage(err));
+    throw new ProviderError(provider, 'network_error', errorMessage(err));
   }
 
   if (!response.ok) {
     throw new ProviderError(
       provider,
-      "token_endpoint_error",
+      'token_endpoint_error',
       `token endpoint returned ${response.status}`,
       response.status,
     );
@@ -93,7 +93,7 @@ export async function postForm(
   try {
     return await response.json();
   } catch (err) {
-    throw new ProviderError(provider, "invalid_json", errorMessage(err), response.status);
+    throw new ProviderError(provider, 'invalid_json', errorMessage(err), response.status);
   }
 }
 
@@ -107,9 +107,9 @@ export function buildTokenRequest(
   creds: { clientId: string; clientSecret: string },
   bodyFields: Record<string, string>,
 ): { body: URLSearchParams; headers: Record<string, string> } {
-  const style = adapter.tokenAuthStyle ?? "body";
-  if (style === "basic") {
-    const token = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString("base64");
+  const style = adapter.tokenAuthStyle ?? 'body';
+  if (style === 'basic') {
+    const token = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64');
     return {
       body: new URLSearchParams(bodyFields),
       headers: { authorization: `Basic ${token}` },

@@ -1,1 +1,1 @@
-export type { TokenStorage, TokenGrant } from "../types.js";
+export type { TokenStorage, TokenGrant } from '../types.js';

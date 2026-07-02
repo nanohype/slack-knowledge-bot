@@ -1,4 +1,4 @@
-import { SourceCitation } from "../connectors/types.js";
+import { SourceCitation } from '../connectors/types.js';
 
 interface FormattedResponse {
   blocks: SlackBlock[];
@@ -10,32 +10,32 @@ interface SlackBlock {
 }
 
 const EMOJI = {
-  WARNING: "\u26a0\ufe0f", // ⚠️
-  LOCK: "\ud83d\udd12", // 🔒
-  HOURGLASS: "\u23f3", // ⏳
-  BULLET: "\u2022", // •
-  EM_DASH: "\u2014", // —
+  WARNING: '\u26a0\ufe0f', // ⚠️
+  LOCK: '\ud83d\udd12', // 🔒
+  HOURGLASS: '\u23f3', // ⏳
+  BULLET: '\u2022', // •
+  EM_DASH: '\u2014', // —
 } as const;
 
-const SOURCE_NAMES: Record<SourceCitation["source"], string> = {
-  notion: "Notion",
-  confluence: "Confluence",
-  drive: "Google Drive",
+const SOURCE_NAMES: Record<SourceCitation['source'], string> = {
+  notion: 'Notion',
+  confluence: 'Confluence',
+  drive: 'Google Drive',
 };
 
 const FOOTER_TEXT = `Powered by *SlackKnowledgeBot* ${EMOJI.EM_DASH} answers are grounded in NanoCorp's knowledge base.`;
 const REDACTED_TEXT = `${EMOJI.LOCK} _Note: Some relevant documents were not accessible under your account. You may need to request access._`;
 
 function section(text: string): SlackBlock {
-  return { type: "section", text: { type: "mrkdwn", text } };
+  return { type: 'section', text: { type: 'mrkdwn', text } };
 }
 
 function context(text: string): SlackBlock {
-  return { type: "context", elements: [{ type: "mrkdwn", text }] };
+  return { type: 'context', elements: [{ type: 'mrkdwn', text }] };
 }
 
 function divider(): SlackBlock {
-  return { type: "divider" };
+  return { type: 'divider' };
 }
 
 function footer(): SlackBlock {
@@ -59,7 +59,7 @@ export function formatAnswer(
 
   if (citations.length > 0) {
     blocks.push(divider());
-    blocks.push(context("*Sources:*"));
+    blocks.push(context('*Sources:*'));
     for (const c of citations) blocks.push(citation(c));
   }
 
@@ -79,21 +79,21 @@ export function formatAnswer(
 }
 
 export function formatOAuthPrompt(
-  sources: Array<SourceCitation["source"]>,
+  sources: Array<SourceCitation['source']>,
   authLinks: Record<string, string>,
 ): FormattedResponse {
   const blocks: SlackBlock[] = [
     section(
-      "To answer your question, SlackKnowledgeBot needs access to the following knowledge sources:",
+      'To answer your question, SlackKnowledgeBot needs access to the following knowledge sources:',
     ),
   ];
   for (const source of sources) {
     blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: `${EMOJI.BULLET} *${SOURCE_NAMES[source]}*` },
+      type: 'section',
+      text: { type: 'mrkdwn', text: `${EMOJI.BULLET} *${SOURCE_NAMES[source]}*` },
       accessory: {
-        type: "button",
-        text: { type: "plain_text", text: `Connect ${SOURCE_NAMES[source]}` },
+        type: 'button',
+        text: { type: 'plain_text', text: `Connect ${SOURCE_NAMES[source]}` },
         url: authLinks[source],
         action_id: `oauth_connect_${source}`,
       },
@@ -101,12 +101,12 @@ export function formatOAuthPrompt(
   }
   blocks.push(
     context(
-      "SlackKnowledgeBot only reads documents you have access to. Your credentials are encrypted and stored securely.",
+      'SlackKnowledgeBot only reads documents you have access to. Your credentials are encrypted and stored securely.',
     ),
   );
   return {
     blocks,
-    text: "SlackKnowledgeBot needs access to your knowledge sources to answer this question.",
+    text: 'SlackKnowledgeBot needs access to your knowledge sources to answer this question.',
   };
 }
 
@@ -118,15 +118,15 @@ export interface RateLimitCopyOptions {
 }
 
 export function formatRateLimitMessage(
-  limitType: "user" | "workspace",
+  limitType: 'user' | 'workspace',
   resetAt: number,
   opts: RateLimitCopyOptions,
 ): FormattedResponse {
   const now = opts.now ?? (() => Date.now());
   const minutesUntilReset = Math.max(1, Math.ceil((resetAt - now()) / 60_000));
-  const waitCopy = minutesUntilReset === 1 ? "1 minute" : `${minutesUntilReset} minutes`;
+  const waitCopy = minutesUntilReset === 1 ? '1 minute' : `${minutesUntilReset} minutes`;
   const message =
-    limitType === "user"
+    limitType === 'user'
       ? `You've reached your query limit (${opts.userPerHour} queries/hour). Try again in about ${waitCopy}.`
       : `The workspace query limit (${opts.workspacePerHour} queries/hour) has been reached. Try again in about ${waitCopy}.`;
   return {
@@ -148,9 +148,9 @@ export function formatError(message: string, traceId: string): FormattedResponse
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+  return new Date(iso).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 }

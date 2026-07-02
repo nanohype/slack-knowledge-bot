@@ -5,7 +5,7 @@
 // `registerProvider` to add custom ones. `getProvider` always returns a
 // fresh instance via the factory so tests can swap implementations.
 
-import type { OAuthProvider } from "./types.js";
+import type { OAuthProvider } from './types.js';
 
 export type OAuthProviderFactory = () => OAuthProvider;
 

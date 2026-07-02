@@ -20,18 +20,18 @@ spec:
               elements:
                 - name: slack-knowledge-bot
                   path: chart
-                  syncWave: "100"
+                  syncWave: '100'
   template:
     metadata:
       name: 'slack-knowledge-bot-{{ index .metadata.labels "environment" }}'
       annotations:
-        argocd.argoproj.io/sync-wave: "{{`{{syncWave}}`}}"
+        argocd.argoproj.io/sync-wave: '{{`{{syncWave}}`}}'
     spec:
       project: tenant-protohype
       sources:
         - repoURL: https://github.com/nanohype/slack-knowledge-bot.git
           targetRevision: main
-          path: "{{`{{path}}`}}"
+          path: '{{`{{path}}`}}'
           helm:
             valueFiles:
               - $values/{{`{{path}}`}}/values.yaml
@@ -40,7 +40,7 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        server: "{{`{{server}}`}}"
+        server: '{{`{{server}}`}}'
         namespace: tenants-protohype
       syncPolicy:
         automated:

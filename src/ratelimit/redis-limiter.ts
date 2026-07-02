@@ -10,13 +10,13 @@
  * Port-injected so tests can pass a fake Redis implementing only the
  * sorted-set methods the limiter actually uses — no vi.mock("ioredis").
  */
-import { logger } from "../logger.js";
+import { logger } from '../logger.js';
 
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
   resetAt: number;
-  limitType?: "user" | "workspace";
+  limitType?: 'user' | 'workspace';
 }
 
 /**
@@ -59,20 +59,20 @@ export function createRateLimiter(deps: RateLimiterConfig): RateLimiter {
       const workspaceKey = `ratelimit:workspace:${workspaceId}`;
 
       const p = deps.redis.pipeline();
-      p.zremrangebyscore(userKey, "-inf", windowStart);
-      p.zremrangebyscore(workspaceKey, "-inf", windowStart);
+      p.zremrangebyscore(userKey, '-inf', windowStart);
+      p.zremrangebyscore(workspaceKey, '-inf', windowStart);
       p.zcard(userKey);
       p.zcard(workspaceKey);
 
-      let results: Awaited<ReturnType<RedisPipelinePort["exec"]>>;
+      let results: Awaited<ReturnType<RedisPipelinePort['exec']>>;
       try {
         results = await p.exec();
       } catch (err) {
-        logger.error({ err, slackUserId }, "rate limiter Redis pipeline threw, failing open");
+        logger.error({ err, slackUserId }, 'rate limiter Redis pipeline threw, failing open');
         return { allowed: true, remaining: -1, resetAt: t + windowMs };
       }
       if (!results) {
-        logger.error({ slackUserId }, "rate limiter Redis pipeline returned null, failing open");
+        logger.error({ slackUserId }, 'rate limiter Redis pipeline returned null, failing open');
         return { allowed: true, remaining: -1, resetAt: t + windowMs };
       }
 
@@ -80,14 +80,14 @@ export function createRateLimiter(deps: RateLimiterConfig): RateLimiter {
       const workspaceCount = (results[3][1] as number) ?? 0;
 
       if (userCount >= deps.userPerHour) {
-        return { allowed: false, remaining: 0, resetAt: t + windowMs, limitType: "user" };
+        return { allowed: false, remaining: 0, resetAt: t + windowMs, limitType: 'user' };
       }
       if (workspaceCount >= deps.workspacePerHour) {
         return {
           allowed: false,
           remaining: deps.workspacePerHour - workspaceCount,
           resetAt: t + windowMs,
-          limitType: "workspace",
+          limitType: 'workspace',
         };
       }
 
@@ -106,7 +106,7 @@ export function createRateLimiter(deps: RateLimiterConfig): RateLimiter {
         // gets one extra query in the current window. Fail-open.
         logger.warn(
           { err, slackUserId },
-          "rate limiter write pipeline failed; request allowed anyway",
+          'rate limiter write pipeline failed; request allowed anyway',
         );
       }
 

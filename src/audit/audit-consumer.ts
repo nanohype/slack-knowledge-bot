@@ -22,9 +22,9 @@
  * names + a `shouldStop` callback come from the constructor.
  */
 
-import { DeleteMessageCommand, ReceiveMessageCommand, type SQSClient } from "@aws-sdk/client-sqs";
-import { PutItemCommand, type DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { DeleteMessageCommand, ReceiveMessageCommand, type SQSClient } from '@aws-sdk/client-sqs';
+import { PutItemCommand, type DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 
 const RE_USER_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const RE_ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -48,12 +48,12 @@ export interface AuditConsumerDeps {
    * Optional structured-log hook. The default is a no-op so unit tests
    * don't need to wire pino.
    */
-  log?: (level: "info" | "warn" | "error", msg: string, ctx?: Record<string, unknown>) => void;
+  log?: (level: 'info' | 'warn' | 'error', msg: string, ctx?: Record<string, unknown>) => void;
   /**
    * Optional counter hook for metrics emission. Called with the outcome
    * tag for every processed message.
    */
-  onProcessed?: (outcome: "ok" | "dropped_malformed" | "dropped_invalid_shape" | "retry") => void;
+  onProcessed?: (outcome: 'ok' | 'dropped_malformed' | 'dropped_invalid_shape' | 'retry') => void;
 }
 
 interface ValidEvent {
@@ -63,15 +63,15 @@ interface ValidEvent {
   datePart: string;
 }
 
-const noopLog: NonNullable<AuditConsumerDeps["log"]> = () => undefined;
+const noopLog: NonNullable<AuditConsumerDeps['log']> = () => undefined;
 
 function validateEvent(raw: unknown): ValidEvent | null {
-  if (typeof raw !== "object" || raw === null) return null;
+  if (typeof raw !== 'object' || raw === null) return null;
   const obj = raw as Record<string, unknown>;
-  const userId = typeof obj["userId"] === "string" ? obj["userId"] : "";
-  const timestamp = typeof obj["timestamp"] === "string" ? obj["timestamp"] : "";
-  const queryHash = typeof obj["queryHash"] === "string" ? obj["queryHash"] : "";
-  const datePart = timestamp.split("T")[0] ?? "";
+  const userId = typeof obj['userId'] === 'string' ? obj['userId'] : '';
+  const timestamp = typeof obj['timestamp'] === 'string' ? obj['timestamp'] : '';
+  const queryHash = typeof obj['queryHash'] === 'string' ? obj['queryHash'] : '';
+  const datePart = timestamp.split('T')[0] ?? '';
   if (!RE_USER_ID.test(userId)) return null;
   if (!RE_ISO_DATE.test(datePart)) return null;
   if (!RE_QUERY_HASH.test(queryHash)) return null;
@@ -100,7 +100,7 @@ async function writeToS3(deps: AuditConsumerDeps, event: ValidEvent, raw: string
       Bucket: deps.auditBucket,
       Key: key,
       Body: raw,
-      ContentType: "application/json",
+      ContentType: 'application/json',
     }),
   );
 }
@@ -124,7 +124,7 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
   const log = deps.log ?? noopLog;
   const onProcessed = deps.onProcessed;
 
-  log("info", "audit-consumer: started", { queueUrl: deps.queueUrl });
+  log('info', 'audit-consumer: started', { queueUrl: deps.queueUrl });
 
   while (!deps.shouldStop()) {
     let result;
@@ -138,7 +138,7 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
         }),
       );
     } catch (err) {
-      log("error", "audit-consumer: receive failed, backing off", { err });
+      log('error', 'audit-consumer: receive failed, backing off', { err });
       await new Promise((r) => setTimeout(r, 1_000));
       continue;
     }
@@ -151,7 +151,7 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
         const receiptHandle = msg.ReceiptHandle;
         const body = msg.Body;
         if (!receiptHandle || !body) {
-          log("warn", "audit-consumer: message missing handle/body, skipping", {
+          log('warn', 'audit-consumer: message missing handle/body, skipping', {
             messageId: msg.MessageId,
           });
           return;
@@ -161,18 +161,18 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
         try {
           parsed = JSON.parse(body);
         } catch {
-          log("warn", "audit-consumer: malformed JSON, dropping", { messageId: msg.MessageId });
-          onProcessed?.("dropped_malformed");
+          log('warn', 'audit-consumer: malformed JSON, dropping', { messageId: msg.MessageId });
+          onProcessed?.('dropped_malformed');
           await deleteMessage(deps, receiptHandle);
           return;
         }
 
         const event = validateEvent(parsed);
         if (!event) {
-          log("warn", "audit-consumer: invalid field shape, dropping", {
+          log('warn', 'audit-consumer: invalid field shape, dropping', {
             messageId: msg.MessageId,
           });
-          onProcessed?.("dropped_invalid_shape");
+          onProcessed?.('dropped_invalid_shape');
           await deleteMessage(deps, receiptHandle);
           return;
         }
@@ -181,20 +181,20 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
           await writeToDdb(deps, event, body);
           await writeToS3(deps, event, body);
           await deleteMessage(deps, receiptHandle);
-          onProcessed?.("ok");
+          onProcessed?.('ok');
         } catch (err) {
           // Don't delete — visibility window expires, SQS reappears the
           // message, we retry. After maxReceiveCount on the queue
           // configuration, SQS moves it to the DLQ.
-          log("error", "audit-consumer: write failed, will retry", {
+          log('error', 'audit-consumer: write failed, will retry', {
             messageId: msg.MessageId,
             err: err instanceof Error ? err.message : String(err),
           });
-          onProcessed?.("retry");
+          onProcessed?.('retry');
         }
       }),
     );
   }
 
-  log("info", "audit-consumer: shouldStop() returned true, exiting loop");
+  log('info', 'audit-consumer: shouldStop() returned true, exiting loop');
 }
