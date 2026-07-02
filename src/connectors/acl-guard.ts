@@ -25,19 +25,19 @@
  * and production passes global `fetch`. No `vi.mock("axios")` or
  * `vi.mock` of the source SDKs anywhere.
  */
-import { SUPPORTED_SOURCES, type RetrievalHit, type Source } from "./types.js";
-import { AclProbeError, getVerifier } from "./registry.js";
-import { logger } from "../logger.js";
+import { SUPPORTED_SOURCES, type RetrievalHit, type Source } from './types.js';
+import { AclProbeError, getVerifier } from './registry.js';
+import { logger } from '../logger.js';
 import {
   CircuitOpenError,
   createCircuitBreaker,
   type CircuitBreaker,
-} from "../runtime/circuit-breaker.js";
+} from '../runtime/circuit-breaker.js';
 
 // Side-effect imports: each module calls registerVerifier() at load time.
-import "./notion.js";
-import "./confluence.js";
-import "./drive.js";
+import './notion.js';
+import './confluence.js';
+import './drive.js';
 
 export type GetAccessToken = (source: Source) => Promise<string | null>;
 
@@ -68,7 +68,7 @@ export function createAclGuard(deps: AclGuardConfig): AclGuard {
         windowMs: WINDOW_MS,
         halfOpenAfterMs: HALF_OPEN_AFTER_MS,
         now: deps.now,
-        onOpen: (n) => onCounter("circuit.open", 1, { source: n }),
+        onOpen: (n) => onCounter('circuit.open', 1, { source: n }),
       }),
     );
   }
@@ -92,7 +92,7 @@ async function verifyOne(
   if (!verifier) {
     logger.warn(
       { source: hit.source, docId: hit.docId },
-      "no verifier registered for source, redacting",
+      'no verifier registered for source, redacting',
     );
     return { ...hit, accessVerified: false, wasRedacted: true };
   }
@@ -110,7 +110,7 @@ async function verifyOne(
     if (err instanceof CircuitOpenError) {
       logger.warn(
         { source: hit.source, docId: hit.docId },
-        "ACL probe short-circuited (breaker open), fail-secure",
+        'ACL probe short-circuited (breaker open), fail-secure',
       );
       return { ...hit, accessVerified: false, wasRedacted: true };
     }
@@ -119,7 +119,7 @@ async function verifyOne(
     }
     logger.warn(
       { err, docId: hit.docId, source: hit.source },
-      "ACL probe non-auth error, fail-secure",
+      'ACL probe non-auth error, fail-secure',
     );
     return { ...hit, accessVerified: false, wasRedacted: true };
   }

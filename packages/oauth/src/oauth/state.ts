@@ -5,8 +5,8 @@
 // server-side state table. On callback we recompute the HMAC with
 // timingSafeEqual and reject on mismatch.
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { StateExpiredError, StateMissingError, StateTamperedError } from "./errors.js";
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { StateExpiredError, StateMissingError, StateTamperedError } from './errors.js';
 
 export interface StatePayload {
   /** Opaque nonce — echoed back by the provider as the `state` query param. */
@@ -20,22 +20,22 @@ export interface StatePayload {
   codeVerifier: string;
 }
 
-export const STATE_COOKIE_NAME = "__oauth_state";
+export const STATE_COOKIE_NAME = '__oauth_state';
 
 function b64urlEncode(s: string | Buffer): string {
-  const buf = typeof s === "string" ? Buffer.from(s, "utf-8") : s;
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const buf = typeof s === 'string' ? Buffer.from(s, 'utf-8') : s;
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function b64urlDecode(s: string): Buffer {
   // Restore padding to make Buffer.from('base64') happy.
-  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
-  const normalized = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  return Buffer.from(normalized, "base64");
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const normalized = s.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  return Buffer.from(normalized, 'base64');
 }
 
 function hmac(secret: string, body: string): Buffer {
-  return createHmac("sha256", secret).update(body).digest();
+  return createHmac('sha256', secret).update(body).digest();
 }
 
 /**
@@ -52,7 +52,7 @@ export function signState(payload: StatePayload, secret: string): string {
  * {@link StateTamperedError} on signature mismatch.
  */
 export function verifyState(signed: string, secret: string): StatePayload {
-  const dot = signed.lastIndexOf(".");
+  const dot = signed.lastIndexOf('.');
   if (dot < 1 || dot === signed.length - 1) throw new StateTamperedError();
 
   const body = signed.slice(0, dot);
@@ -67,7 +67,7 @@ export function verifyState(signed: string, secret: string): StatePayload {
 
   let payload: StatePayload;
   try {
-    payload = JSON.parse(b64urlDecode(body).toString("utf-8")) as StatePayload;
+    payload = JSON.parse(b64urlDecode(body).toString('utf-8')) as StatePayload;
   } catch {
     throw new StateTamperedError();
   }
@@ -81,7 +81,7 @@ export function assertStateFresh(payload: StatePayload, ttlSeconds: number, now:
 }
 
 export function generateNonce(): string {
-  return randomBytes(16).toString("hex");
+  return randomBytes(16).toString('hex');
 }
 
 /**
@@ -93,28 +93,28 @@ export function generateNonce(): string {
 export function buildStateCookie(value: string, ttlSeconds: number, domain?: string): string {
   const parts = [
     `${STATE_COOKIE_NAME}=${value}`,
-    "Path=/oauth",
+    'Path=/oauth',
     `Max-Age=${ttlSeconds}`,
-    "HttpOnly",
-    "Secure",
-    "SameSite=Lax",
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
   ];
   if (domain) parts.push(`Domain=${domain}`);
-  return parts.join("; ");
+  return parts.join('; ');
 }
 
 /** Serialize a `Set-Cookie` header that clears the state cookie. */
 export function clearStateCookie(domain?: string): string {
   const parts = [
     `${STATE_COOKIE_NAME}=`,
-    "Path=/oauth",
-    "Max-Age=0",
-    "HttpOnly",
-    "Secure",
-    "SameSite=Lax",
+    'Path=/oauth',
+    'Max-Age=0',
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
   ];
   if (domain) parts.push(`Domain=${domain}`);
-  return parts.join("; ");
+  return parts.join('; ');
 }
 
 /**
@@ -122,24 +122,24 @@ export function clearStateCookie(domain?: string): string {
  * or throw {@link StateMissingError} when absent.
  */
 export function readStateCookie(req: Request): string {
-  const raw = req.headers.get("cookie") ?? "";
-  for (const part of raw.split(";")) {
-    const [k, ...rest] = part.trim().split("=");
-    if (k === STATE_COOKIE_NAME) return rest.join("=");
+  const raw = req.headers.get('cookie') ?? '';
+  for (const part of raw.split(';')) {
+    const [k, ...rest] = part.trim().split('=');
+    if (k === STATE_COOKIE_NAME) return rest.join('=');
   }
   throw new StateMissingError();
 }
 
 function isStatePayload(value: unknown): value is StatePayload {
-  if (value === null || typeof value !== "object") return false;
+  if (value === null || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return (
-    typeof v.nonce === "string" &&
-    typeof v.userId === "string" &&
-    typeof v.provider === "string" &&
-    typeof v.returnTo === "string" &&
-    typeof v.createdAt === "number" &&
-    typeof v.codeVerifier === "string"
+    typeof v.nonce === 'string' &&
+    typeof v.userId === 'string' &&
+    typeof v.provider === 'string' &&
+    typeof v.returnTo === 'string' &&
+    typeof v.createdAt === 'number' &&
+    typeof v.codeVerifier === 'string'
   );
 }
 
@@ -168,12 +168,12 @@ export function readStatePayloadUnverified(cookieHeaderOrValue: string): StatePa
   // If it's a raw Cookie header (has "name=value" pairs separated by `;`
   // or `=` appears before the first `.`), extract the state-cookie value.
   let raw = cookieHeaderOrValue;
-  if (raw.includes(";") || (raw.includes("=") && raw.indexOf("=") < raw.indexOf("."))) {
+  if (raw.includes(';') || (raw.includes('=') && raw.indexOf('=') < raw.indexOf('.'))) {
     let found: string | null = null;
-    for (const part of raw.split(";")) {
-      const [k, ...rest] = part.trim().split("=");
+    for (const part of raw.split(';')) {
+      const [k, ...rest] = part.trim().split('=');
       if (k === STATE_COOKIE_NAME) {
-        found = rest.join("=");
+        found = rest.join('=');
         break;
       }
     }
@@ -181,11 +181,11 @@ export function readStatePayloadUnverified(cookieHeaderOrValue: string): StatePa
     raw = found;
   }
 
-  const dot = raw.lastIndexOf(".");
+  const dot = raw.lastIndexOf('.');
   if (dot < 1) return null;
   const body = raw.slice(0, dot);
   try {
-    const parsed = JSON.parse(b64urlDecode(body).toString("utf-8"));
+    const parsed = JSON.parse(b64urlDecode(body).toString('utf-8'));
     return isStatePayload(parsed) ? parsed : null;
   } catch {
     return null;

@@ -15,12 +15,12 @@
  * breaker: Bedrock has its own retry/backoff, and an embedding failure
  * on one query doesn't spare the next.
  */
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { z } from "zod";
-import type { RetrievalHit } from "../connectors/types.js";
-import type { RetrievalBackend } from "./backends/types.js";
-import { logger } from "../logger.js";
-import { CircuitOpenError, createCircuitBreaker } from "../runtime/circuit-breaker.js";
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { z } from 'zod';
+import type { RetrievalHit } from '../connectors/types.js';
+import type { RetrievalBackend } from './backends/types.js';
+import { logger } from '../logger.js';
+import { CircuitOpenError, createCircuitBreaker } from '../runtime/circuit-breaker.js';
 
 const EmbeddingResponseSchema = z.object({
   embedding: z.array(z.number()).min(1),
@@ -29,7 +29,7 @@ const EmbeddingResponseSchema = z.object({
 const TOP_K = 20;
 const FINAL_K = 10;
 const EMBED_TIMEOUT_MS = 5000;
-const BREAKER_NAME = "retrieval";
+const BREAKER_NAME = 'retrieval';
 const FAILURE_THRESHOLD = 5;
 const WINDOW_MS = 60_000;
 const HALF_OPEN_AFTER_MS = 30_000;
@@ -58,7 +58,7 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
     windowMs: WINDOW_MS,
     halfOpenAfterMs: HALF_OPEN_AFTER_MS,
     now: deps.now,
-    onOpen: (n) => counter("circuit.open", 1, { source: n }),
+    onOpen: (n) => counter('circuit.open', 1, { source: n }),
   });
 
   return {
@@ -67,21 +67,21 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
       const response = await deps.bedrock.send(
         new InvokeModelCommand({
           modelId: deps.embeddingModelId,
-          contentType: "application/json",
-          accept: "application/json",
+          contentType: 'application/json',
+          accept: 'application/json',
           body: JSON.stringify({ inputText: queryText }),
         }),
         { abortSignal: AbortSignal.timeout(EMBED_TIMEOUT_MS) },
       );
-      timing("embedding.latency_ms", Date.now() - start);
+      timing('embedding.latency_ms', Date.now() - start);
       const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
       const parsed = EmbeddingResponseSchema.safeParse(raw);
       if (!parsed.success) {
         logger.error(
           { modelId: deps.embeddingModelId, err: parsed.error.issues },
-          "Bedrock embedding response did not match expected shape",
+          'Bedrock embedding response did not match expected shape',
         );
-        throw new Error("Bedrock embedding response invalid");
+        throw new Error('Bedrock embedding response invalid');
       }
       return parsed.data.embedding;
     },
@@ -95,20 +95,20 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
             deps.backend.textSearch({ query: queryText, topK: TOP_K }),
           ]),
         );
-        timing("retrieval.latency_ms", Date.now() - start);
+        timing('retrieval.latency_ms', Date.now() - start);
         const knnRanked = knnHits.map((hit, index) => ({ hit, rank: index + 1 }));
         const textRanked = textHits.map((hit, index) => ({ hit, rank: index + 1 }));
         const fused = rrfFusion(knnRanked, textRanked, FINAL_K);
         logger.debug(
           { knnCount: knnHits.length, textCount: textHits.length, fusedCount: fused.length },
-          "hybrid search",
+          'hybrid search',
         );
         return fused;
       } catch (err) {
         if (err instanceof CircuitOpenError) {
           logger.warn(
             { breaker: BREAKER_NAME },
-            "retrieval short-circuited (breaker open), returning empty hits",
+            'retrieval short-circuited (breaker open), returning empty hits',
           );
           return [];
         }

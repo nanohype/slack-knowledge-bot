@@ -3,7 +3,7 @@
 // Volatile, single-process storage. Good for tests and local dev.
 // Do not use in production — tokens vanish on restart.
 
-import type { TokenGrant, TokenStorage } from "./types.js";
+import type { TokenGrant, TokenStorage } from './types.js';
 
 export class InMemoryTokenStorage implements TokenStorage {
   private readonly byUser = new Map<string, Map<string, TokenGrant>>();

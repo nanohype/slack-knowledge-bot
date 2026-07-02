@@ -30,10 +30,10 @@
  * Tests pass `vi.fn<typeof fetch>()` and an `aws-sdk-client-mock`ed
  * DynamoDBClient. No vi.mock of SDK packages.
  */
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
-import { createWorkOsDirectoryClient } from "../runtime/workos-directory.js";
-import { logger } from "../logger.js";
-import type { IdentityResolver, ResolvedIdentity } from "./types.js";
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { createWorkOsDirectoryClient } from '../runtime/workos-directory.js';
+import { logger } from '../logger.js';
+import type { IdentityResolver, ResolvedIdentity } from './types.js';
 
 export interface WorkOSResolverConfig {
   fetchImpl: typeof fetch;
@@ -74,8 +74,8 @@ export function createWorkOSResolver(deps: WorkOSResolverConfig): IdentityResolv
     const ttl = Number(response.Item.ttl?.N ?? 0);
     if (ttl < nowSec) return null;
     return {
-      externalUserId: response.Item.externalUserId?.S ?? "",
-      email: response.Item.email?.S ?? "",
+      externalUserId: response.Item.externalUserId?.S ?? '',
+      email: response.Item.email?.S ?? '',
     };
   }
 
@@ -103,7 +103,7 @@ export function createWorkOSResolver(deps: WorkOSResolverConfig): IdentityResolv
     async resolveSlackToExternal(slackUserId, slackEmail) {
       const cached = await getCached(slackUserId);
       if (cached) {
-        logger.debug({ slackUserId, source: "cache" }, "identity resolved from cache");
+        logger.debug({ slackUserId, source: 'cache' }, 'identity resolved from cache');
         return cached;
       }
       try {
@@ -116,7 +116,7 @@ export function createWorkOSResolver(deps: WorkOSResolverConfig): IdentityResolv
         await writeCache(slackUserId, identity.externalUserId, identity.email);
         return identity;
       } catch (err) {
-        logger.error({ err, slackUserId }, "WorkOS identity resolution failed");
+        logger.error({ err, slackUserId }, 'WorkOS identity resolution failed');
         return null;
       }
     },

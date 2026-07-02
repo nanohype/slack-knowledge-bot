@@ -11,7 +11,7 @@ export class OAuthError extends Error {
 
   constructor(code: string, message: string, provider?: string) {
     super(message);
-    this.name = "OAuthError";
+    this.name = 'OAuthError';
     this.code = code;
     this.provider = provider;
   }
@@ -19,56 +19,56 @@ export class OAuthError extends Error {
 
 export class StateTamperedError extends OAuthError {
   constructor() {
-    super("state_tampered", "state cookie signature mismatch");
+    super('state_tampered', 'state cookie signature mismatch');
   }
 }
 
 export class StateExpiredError extends OAuthError {
   constructor() {
-    super("state_expired", "state cookie expired");
+    super('state_expired', 'state cookie expired');
   }
 }
 
 export class StateMissingError extends OAuthError {
   constructor() {
-    super("state_missing", "state cookie not present on callback");
+    super('state_missing', 'state cookie not present on callback');
   }
 }
 
 export class UserMismatchError extends OAuthError {
   constructor() {
-    super("user_mismatch", "state userId does not match authenticated caller");
+    super('user_mismatch', 'state userId does not match authenticated caller');
   }
 }
 
 export class UnauthenticatedError extends OAuthError {
   constructor() {
-    super("unauthenticated", "resolveUserId returned null");
+    super('unauthenticated', 'resolveUserId returned null');
   }
 }
 
 export class UnknownProviderError extends OAuthError {
   constructor(provider: string) {
-    super("unknown_provider", `no provider registered: ${provider}`, provider);
+    super('unknown_provider', `no provider registered: ${provider}`, provider);
   }
 }
 
 export class MissingCredentialsError extends OAuthError {
   constructor(provider: string) {
-    super("missing_credentials", `no clientCredentials for provider: ${provider}`, provider);
+    super('missing_credentials', `no clientCredentials for provider: ${provider}`, provider);
   }
 }
 
 export class RedirectMismatchError extends OAuthError {
   constructor(provider: string) {
-    super("redirect_mismatch", `redirect_uri does not match registered value`, provider);
+    super('redirect_mismatch', `redirect_uri does not match registered value`, provider);
   }
 }
 
 export class RefreshFailedError extends OAuthError {
   readonly status?: number;
   constructor(provider: string, status?: number) {
-    super("refresh_failed", `refresh rejected by provider`, provider);
+    super('refresh_failed', `refresh rejected by provider`, provider);
     this.status = status;
   }
 }
@@ -83,7 +83,7 @@ export class ProviderError extends OAuthError {
 
 export class ConfigError extends OAuthError {
   constructor(message: string) {
-    super("config_error", message);
+    super('config_error', message);
   }
 }
 
@@ -95,7 +95,7 @@ export class ConfigError extends OAuthError {
  */
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
-  if (typeof err === "string") return err;
+  if (typeof err === 'string') return err;
   try {
     return JSON.stringify(err);
   } catch {

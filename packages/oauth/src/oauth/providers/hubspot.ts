@@ -4,9 +4,9 @@
 // expire (~30 minutes) and are refreshable. Refresh responses include
 // a fresh refresh_token that replaces the old one.
 
-import type { OAuthProvider, TokenGrant } from "./types.js";
-import { registerProvider } from "./registry.js";
-import { expiresAtFromExpiresIn } from "./shared.js";
+import type { OAuthProvider, TokenGrant } from './types.js';
+import { registerProvider } from './registry.js';
+import { expiresAtFromExpiresIn } from './shared.js';
 
 interface HubSpotTokenResponse {
   access_token: string;
@@ -26,18 +26,18 @@ function parse(raw: unknown, previous?: TokenGrant): TokenGrant {
 }
 
 export const hubspotProvider: OAuthProvider = {
-  name: "hubspot",
+  name: 'hubspot',
   authUrl:
-    "https://app.hubspot.com/oauth/authorize" +
-    "?response_type=code" +
-    "&client_id={client_id}" +
-    "&redirect_uri={redirect_uri}" +
-    "&scope={scope}" +
-    "&state={state}" +
-    "&code_challenge={code_challenge}" +
-    "&code_challenge_method={code_challenge_method}",
-  tokenUrl: "https://api.hubapi.com/oauth/v1/token",
-  defaultScopes: ["oauth", "crm.objects.contacts.read"],
+    'https://app.hubspot.com/oauth/authorize' +
+    '?response_type=code' +
+    '&client_id={client_id}' +
+    '&redirect_uri={redirect_uri}' +
+    '&scope={scope}' +
+    '&state={state}' +
+    '&code_challenge={code_challenge}' +
+    '&code_challenge_method={code_challenge_method}',
+  tokenUrl: 'https://api.hubapi.com/oauth/v1/token',
+  defaultScopes: ['oauth', 'crm.objects.contacts.read'],
   usePkce: true,
 
   parseTokenResponse(raw) {
@@ -49,4 +49,4 @@ export const hubspotProvider: OAuthProvider = {
   },
 };
 
-registerProvider("hubspot", () => hubspotProvider);
+registerProvider('hubspot', () => hubspotProvider);

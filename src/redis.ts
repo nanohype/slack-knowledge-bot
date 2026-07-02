@@ -7,15 +7,15 @@
  * connection config (TLS, timeouts, retries) lives in exactly one place and
  * every consumer shares the one client singleton.
  */
-import { Redis } from "ioredis";
-import { config } from "./config/index.js";
-import { logger } from "./logger.js";
+import { Redis } from 'ioredis';
+import { config } from './config/index.js';
+import { logger } from './logger.js';
 
 let redisClient: Redis | null = null;
 
 export function getRedis(): Redis {
   if (!redisClient) {
-    const isTls = config.REDIS_URL.startsWith("rediss://");
+    const isTls = config.REDIS_URL.startsWith('rediss://');
     redisClient = new Redis(config.REDIS_URL, {
       enableReadyCheck: true,
       maxRetriesPerRequest: 3,
@@ -24,7 +24,7 @@ export function getRedis(): Redis {
       commandTimeout: 1000,
       ...(isTls ? { tls: { rejectUnauthorized: true } } : {}),
     });
-    redisClient.on("error", (err: Error) => logger.error({ err }, "Redis connection error"));
+    redisClient.on('error', (err: Error) => logger.error({ err }, 'Redis connection error'));
   }
   return redisClient;
 }

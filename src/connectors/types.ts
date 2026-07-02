@@ -4,7 +4,7 @@
  * this tuple rather than redeclaring it locally — adding a fourth source
  * is a one-line change here + a new verifier module.
  */
-export const SUPPORTED_SOURCES = ["notion", "confluence", "drive"] as const;
+export const SUPPORTED_SOURCES = ['notion', 'confluence', 'drive'] as const;
 export type Source = (typeof SUPPORTED_SOURCES)[number];
 
 export interface RetrievalHit {

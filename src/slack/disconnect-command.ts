@@ -10,13 +10,13 @@
  * everything consistently. Tests pass fakes implementing the typed
  * interfaces.
  */
-import type { AllMiddlewareArgs, App, SlackCommandMiddlewareArgs } from "@slack/bolt";
-import type { OAuthRouter } from "slack-knowledge-bot-oauth";
-import type { IdentityResolver } from "../identity/types.js";
-import { SUPPORTED_SOURCES, type Source } from "../connectors/types.js";
-import { logger } from "../logger.js";
+import type { AllMiddlewareArgs, App, SlackCommandMiddlewareArgs } from '@slack/bolt';
+import type { OAuthRouter } from 'slack-knowledge-bot-oauth';
+import type { IdentityResolver } from '../identity/types.js';
+import { SUPPORTED_SOURCES, type Source } from '../connectors/types.js';
+import { logger } from '../logger.js';
 
-const USAGE = "Usage: `/slack-knowledge-bot disconnect [notion|confluence|drive|all]`";
+const USAGE = 'Usage: `/slack-knowledge-bot disconnect [notion|confluence|drive|all]`';
 
 export type DisconnectArgs = SlackCommandMiddlewareArgs & AllMiddlewareArgs;
 
@@ -39,8 +39,8 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
     const parts = command.text.trim().split(/\s+/).filter(Boolean);
     const [subcommand, target] = parts;
 
-    if (subcommand !== "disconnect" || !target) {
-      await respond({ response_type: "ephemeral", text: USAGE });
+    if (subcommand !== 'disconnect' || !target) {
+      await respond({ response_type: 'ephemeral', text: USAGE });
       return;
     }
 
@@ -51,12 +51,12 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
       const info = await client.users.info({ user: slackUserId });
       email = info.user?.profile?.email ?? undefined;
     } catch (err) {
-      logger.warn({ err, slackUserId }, "users.info failed during /slack-knowledge-bot disconnect");
+      logger.warn({ err, slackUserId }, 'users.info failed during /slack-knowledge-bot disconnect');
     }
     if (!email) {
       await respond({
-        response_type: "ephemeral",
-        text: "Could not read your Slack profile email. Make sure your account has a verified email, then retry.",
+        response_type: 'ephemeral',
+        text: 'Could not read your Slack profile email. Make sure your account has a verified email, then retry.',
       });
       return;
     }
@@ -64,24 +64,24 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
     const identity = await deps.identityResolver.resolveSlackToExternal(slackUserId, email);
     if (!identity) {
       await respond({
-        response_type: "ephemeral",
-        text: "Could not verify your identity. Ensure your Slack account is linked to your workforce directory.",
+        response_type: 'ephemeral',
+        text: 'Could not verify your identity. Ensure your Slack account is linked to your workforce directory.',
       });
       return;
     }
 
-    if (target === "all") {
+    if (target === 'all') {
       await deps.oauth.revokeAllForUser(identity.externalUserId);
       await respond({
-        response_type: "ephemeral",
-        text: "Disconnected all sources. Ask me a question to re-authorize.",
+        response_type: 'ephemeral',
+        text: 'Disconnected all sources. Ask me a question to re-authorize.',
       });
       return;
     }
 
     if (!SUPPORTED_SOURCES.includes(target as Source)) {
       await respond({
-        response_type: "ephemeral",
+        response_type: 'ephemeral',
         text: `Unknown source \`${target}\`. ${USAGE}`,
       });
       return;
@@ -90,7 +90,7 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
     const source = target as Source;
     await deps.oauth.revokeTokens(identity.externalUserId, deps.sourceToProvider[source]);
     await respond({
-      response_type: "ephemeral",
+      response_type: 'ephemeral',
       text: `Disconnected *${source}*. Ask me a question to re-authorize.`,
     });
   }
@@ -98,7 +98,7 @@ export function createDisconnectCommand(deps: DisconnectCommandConfig): Disconne
   return {
     handle,
     registerWith(app) {
-      app.command("/slack-knowledge-bot", handle);
+      app.command('/slack-knowledge-bot', handle);
     },
   };
 }

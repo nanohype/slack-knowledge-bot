@@ -6,11 +6,11 @@
 // is authenticated, but additional access control (e.g., restricting
 // to admin tokens) is the consumer's responsibility.
 
-import { UnauthenticatedError, UnknownProviderError } from "../errors.js";
-import type { OAuthRouterConfig, RequestHandler } from "../types.js";
-import type { TokenRefresher } from "../refresh.js";
-import { mapHandlerError } from "./errorMapping.js";
-import { extractProvider } from "./shared.js";
+import { UnauthenticatedError, UnknownProviderError } from '../errors.js';
+import type { OAuthRouterConfig, RequestHandler } from '../types.js';
+import type { TokenRefresher } from '../refresh.js';
+import { mapHandlerError } from './errorMapping.js';
+import { extractProvider } from './shared.js';
 
 export function createRefreshHandler(
   config: OAuthRouterConfig,
@@ -18,7 +18,7 @@ export function createRefreshHandler(
 ): RequestHandler {
   return async (req) => {
     try {
-      const providerName = extractProvider(req.url, "refresh");
+      const providerName = extractProvider(req.url, 'refresh');
       if (!config.providers[providerName]) throw new UnknownProviderError(providerName);
 
       const userId = await config.resolveUserId(req);
@@ -28,15 +28,15 @@ export function createRefreshHandler(
       if (!grant) {
         return new Response(JSON.stringify({ ok: false }), {
           status: 409,
-          headers: { "content-type": "application/json" },
+          headers: { 'content-type': 'application/json' },
         });
       }
       return new Response(JSON.stringify({ ok: true, expiresAt: grant.expiresAt ?? null }), {
         status: 200,
-        headers: { "content-type": "application/json" },
+        headers: { 'content-type': 'application/json' },
       });
     } catch (err) {
-      return mapHandlerError(err, "refresh");
+      return mapHandlerError(err, 'refresh');
     }
   };
 }

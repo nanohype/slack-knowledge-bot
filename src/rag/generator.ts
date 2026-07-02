@@ -8,15 +8,15 @@
  * threshold as config. Tests build a stubbed Bedrock via
  * `aws-sdk-client-mock` and check the outgoing InvokeModel shape.
  */
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { z } from "zod";
-import type { RetrievalHit, SourceCitation } from "../connectors/types.js";
-import { logger } from "../logger.js";
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { z } from 'zod';
+import type { RetrievalHit, SourceCitation } from '../connectors/types.js';
+import { logger } from '../logger.js';
 
 const LLM_TIMEOUT_MS = 30000;
 
 const CompletionResponseSchema = z.object({
-  content: z.array(z.object({ text: z.string() })).min(1, "Bedrock returned empty content array"),
+  content: z.array(z.object({ text: z.string() })).min(1, 'Bedrock returned empty content array'),
   // Claude-on-Bedrock returns token accounting; metered so the AI path's cost
   // is observable per-query and in aggregate (cache_read reflects the
   // system-prompt cache breakpoint above). Optional — absent on error shapes.
@@ -75,7 +75,7 @@ export function createGenerator(deps: GeneratorConfig): Generator {
       if (accessibleHits.length === 0) {
         return {
           answerText: hasRedactedHits
-            ? "I found some potentially relevant documents, but none are accessible under your account. You may need to request access."
+            ? 'I found some potentially relevant documents, but none are accessible under your account. You may need to request access.'
             : "I didn't find relevant information in the knowledge base for your question.",
           citations: [],
           hasRedactedHits,
@@ -88,26 +88,26 @@ export function createGenerator(deps: GeneratorConfig): Generator {
           (hit, i) =>
             `[Document ${i + 1}]\nTitle: ${hit.title}\nSource: ${hit.source}\nURL: ${hit.url}\nLast Modified: ${hit.lastModified}\nContent: ${hit.chunkText}`,
         )
-        .join("\n\n---\n\n");
+        .join('\n\n---\n\n');
 
       const llmStart = now();
       try {
         const response = await deps.bedrock.send(
           new InvokeModelCommand({
             modelId: deps.llmModelId,
-            contentType: "application/json",
-            accept: "application/json",
+            contentType: 'application/json',
+            accept: 'application/json',
             body: JSON.stringify({
-              anthropic_version: "bedrock-2023-05-31",
+              anthropic_version: 'bedrock-2023-05-31',
               max_tokens: 1024,
               temperature: 0,
               // Prompt-cache breakpoint on the stable system prefix: it's the same
               // text on every query, so we mark it ephemeral-cacheable. The per-query
               // [CONTEXT]/[QUESTION] user turn stays after the breakpoint, uncached.
-              system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+              system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
               messages: [
                 {
-                  role: "user",
+                  role: 'user',
                   content: `[CONTEXT]\n${contextDocuments}\n\n[QUESTION]\n${question}`,
                 },
               ],
@@ -115,14 +115,14 @@ export function createGenerator(deps: GeneratorConfig): Generator {
           }),
           { abortSignal: AbortSignal.timeout(LLM_TIMEOUT_MS) },
         );
-        timing("llm.latency_ms", now() - llmStart);
+        timing('llm.latency_ms', now() - llmStart);
         const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
         const parsed = CompletionResponseSchema.parse(raw);
         const usage = parsed.usage;
-        if (usage?.input_tokens != null) counter("llm.input_tokens", usage.input_tokens);
-        if (usage?.output_tokens != null) counter("llm.output_tokens", usage.output_tokens);
+        if (usage?.input_tokens != null) counter('llm.input_tokens', usage.input_tokens);
+        if (usage?.output_tokens != null) counter('llm.output_tokens', usage.output_tokens);
         if (usage?.cache_read_input_tokens != null)
-          counter("llm.cache_read_tokens", usage.cache_read_input_tokens);
+          counter('llm.cache_read_tokens', usage.cache_read_input_tokens);
         const answerText: string = parsed.content[0].text;
         const seen = new Set<string>();
         const citations: SourceCitation[] = accessibleHits
@@ -142,9 +142,9 @@ export function createGenerator(deps: GeneratorConfig): Generator {
           }));
         return { answerText, citations, hasRedactedHits, hasNoHits: false };
       } catch (err) {
-        counter("llm.error");
-        timing("llm.latency_ms", now() - llmStart);
-        logger.error({ err, question: question.slice(0, 50) }, "Bedrock LLM call failed");
+        counter('llm.error');
+        timing('llm.latency_ms', now() - llmStart);
+        logger.error({ err, question: question.slice(0, 50) }, 'Bedrock LLM call failed');
         return {
           answerText: "I'm having trouble generating an answer right now. Please try again.",
           citations: [],

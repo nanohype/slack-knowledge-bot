@@ -7,41 +7,41 @@
  * gets a typed fake for its external port (fake fetch, fake Redis, fake
  * RetrievalBackend, aws-sdk-client-mock for Bedrock + SQS + DDB).
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockClient } from "aws-sdk-client-mock";
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import type { App, SayFn, AllMiddlewareArgs } from "@slack/bolt";
-import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
-import { createRateLimiter } from "../ratelimit/redis-limiter.js";
-import { createWorkOSResolver } from "../identity/workos-resolver.js";
-import { createAclGuard } from "../connectors/acl-guard.js";
-import { createRetriever } from "../rag/retriever.js";
-import type { RetrievalBackend } from "../rag/backends/types.js";
-import type { RetrievalHit } from "../connectors/types.js";
-import { createGenerator } from "../rag/generator.js";
-import { createAuditLogger } from "../audit/audit-logger.js";
-import { createQueryHandler } from "./query-handler.js";
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mockClient } from 'aws-sdk-client-mock';
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import type { App, SayFn, AllMiddlewareArgs } from '@slack/bolt';
+import type { OAuthRouter, TokenStorage } from 'slack-knowledge-bot-oauth';
+import { createRateLimiter } from '../ratelimit/redis-limiter.js';
+import { createWorkOSResolver } from '../identity/workos-resolver.js';
+import { createAclGuard } from '../connectors/acl-guard.js';
+import { createRetriever } from '../rag/retriever.js';
+import type { RetrievalBackend } from '../rag/backends/types.js';
+import type { RetrievalHit } from '../connectors/types.js';
+import { createGenerator } from '../rag/generator.js';
+import { createAuditLogger } from '../audit/audit-logger.js';
+import { createQueryHandler } from './query-handler.js';
 
-type BoltClient = AllMiddlewareArgs["client"];
+type BoltClient = AllMiddlewareArgs['client'];
 
 const ddbMock = mockClient(DynamoDBClient);
 const bedrockMock = mockClient(BedrockRuntimeClient);
 const sqsMock = mockClient(SQSClient);
 
 const SOURCE_TO_PROVIDER = {
-  notion: "notion",
-  confluence: "atlassian",
-  drive: "google",
+  notion: 'notion',
+  confluence: 'atlassian',
+  drive: 'google',
 } as const;
 
-const NOW = new Date("2026-04-15T00:00:00Z").getTime();
+const NOW = new Date('2026-04-15T00:00:00Z').getTime();
 
 function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Response {
   return new Response(JSON.stringify(body), {
     ...init,
-    headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
   });
 }
 
@@ -66,7 +66,7 @@ function fakeRedisUnderLimit() {
   return {
     pipeline: () => pipeline,
     get: async () => null,
-    set: async () => "OK" as const,
+    set: async () => 'OK' as const,
   };
 }
 
@@ -79,12 +79,12 @@ function fakeBackend(hits: RetrievalHit[]): RetrievalBackend {
 
 function hit(overrides: Partial<RetrievalHit>): RetrievalHit {
   return {
-    docId: "d",
-    source: "notion",
-    title: "",
-    url: "",
-    chunkText: "",
-    lastModified: "2026-04-01",
+    docId: 'd',
+    source: 'notion',
+    title: '',
+    url: '',
+    chunkText: '',
+    lastModified: '2026-04-01',
     score: 0,
     accessVerified: false,
     wasRedacted: false,
@@ -96,7 +96,7 @@ function fakeStorage(grants: Record<string, boolean>): TokenStorage {
   return {
     get: vi.fn(async (_userId: string, provider: string) =>
       grants[provider]
-        ? { accessToken: "tkn", refreshToken: "rf", expiresAt: NOW + 3600_000 }
+        ? { accessToken: 'tkn', refreshToken: 'rf', expiresAt: NOW + 3600_000 }
         : null,
     ),
     put: vi.fn(async () => {}),
@@ -137,20 +137,20 @@ function buildDeps(overrides: {
     (vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch);
   const backend = overrides.backend ?? fakeBackend([]);
   const storage = overrides.storage ?? fakeStorage({ notion: true, atlassian: true, google: true });
-  const oauth = overrides.oauth ?? fakeOAuth({ notion: "ntkn", atlassian: "atkn", google: "gtkn" });
+  const oauth = overrides.oauth ?? fakeOAuth({ notion: 'ntkn', atlassian: 'atkn', google: 'gtkn' });
 
   const auditLogger = createAuditLogger({
     sqs: new SQSClient({}),
-    queueUrl: "https://sqs/q",
-    dlqUrl: "https://sqs/dlq",
+    queueUrl: 'https://sqs/q',
+    dlqUrl: 'https://sqs/dlq',
     now: () => NOW,
   });
   const identityResolver = createWorkOSResolver({
     fetchImpl,
     ddbClient: new DynamoDBClient({}),
-    workosApiKey: "sk_test",
-    workosDirectoryId: "directory_01TEST",
-    identityCacheTable: "identity-cache",
+    workosApiKey: 'sk_test',
+    workosDirectoryId: 'directory_01TEST',
+    identityCacheTable: 'identity-cache',
     now: () => NOW,
   });
   const rateLimiter = createRateLimiter({
@@ -162,11 +162,11 @@ function buildDeps(overrides: {
   const retriever = createRetriever({
     backend,
     bedrock: new BedrockRuntimeClient({}),
-    embeddingModelId: "titan",
+    embeddingModelId: 'titan',
   });
   const generator = createGenerator({
     bedrock: new BedrockRuntimeClient({}),
-    llmModelId: "claude",
+    llmModelId: 'claude',
     staleThresholdDays: 90,
     now: () => NOW,
   });
@@ -183,8 +183,8 @@ function buildDeps(overrides: {
     oauthStorage: storage,
     signOAuthStartUrl: (userId, provider) => `sig-${userId}-${provider}`,
     sourceToProvider: SOURCE_TO_PROVIDER,
-    workspaceId: "W",
-    appBaseUrl: "https://slack-knowledge-bot.test",
+    workspaceId: 'W',
+    appBaseUrl: 'https://slack-knowledge-bot.test',
     userPerHour: 20,
     workspacePerHour: 500,
     now: () => NOW,
@@ -201,37 +201,37 @@ function makeSay(): { say: SayFn; calls: Parameters<SayFn>[0][] } {
   return { say, calls };
 }
 
-describe("query pipeline integration", () => {
+describe('query pipeline integration', () => {
   beforeEach(() => {
     ddbMock.reset();
     bedrockMock.reset();
     sqsMock.reset();
   });
 
-  it("happy path: rate-limit allow → Slack email → directory resolve → retrieve → ACL grant → generate → audit", async () => {
+  it('happy path: rate-limit allow → Slack email → directory resolve → retrieve → ACL grant → generate → audit', async () => {
     ddbMock.on(GetItemCommand).resolves({
       Item: {
-        slackUserId: { S: "U1" },
-        externalUserId: { S: "user-1" },
-        email: { S: "u1@corp.example" },
+        slackUserId: { S: 'U1' },
+        externalUserId: { S: 'user-1' },
+        email: { S: 'u1@corp.example' },
         ttl: { N: String(Math.floor(NOW / 1000) + 600) },
       },
     });
     bedrockMock
       .on(InvokeModelCommand)
       .resolvesOnce(bedrockBody({ embedding: [0.1, 0.2] }))
-      .resolvesOnce(bedrockBody({ content: [{ text: "Answer." }] }));
-    sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
+      .resolvesOnce(bedrockBody({ content: [{ text: 'Answer.' }] }));
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: 'm-1' });
 
     const probeFetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
     const backend = fakeBackend([
       hit({
-        docId: "notion:page:p1",
-        source: "notion",
-        url: "https://notion.so/p1",
-        title: "Vacation Policy",
-        chunkText: "Employees get 15 days.",
-        lastModified: "2026-04-01",
+        docId: 'notion:page:p1',
+        source: 'notion',
+        url: 'https://notion.so/p1',
+        title: 'Vacation Policy',
+        chunkText: 'Employees get 15 days.',
+        lastModified: '2026-04-01',
         score: 0.9,
       }),
     ]);
@@ -239,21 +239,21 @@ describe("query pipeline integration", () => {
     const { handler } = buildDeps({ fetchImpl: probeFetch, backend });
     const { say, calls } = makeSay();
     await handler.processQuery({
-      userId: "U1",
-      text: "what is PTO?",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'what is PTO?',
+      channelId: 'C1',
       say,
-      client: fakeBoltClient("u1@corp.example"),
+      client: fakeBoltClient('u1@corp.example'),
     });
 
     expect(calls).toHaveLength(1);
     const body = JSON.stringify(calls[0]);
-    expect(body).toContain("Answer.");
-    expect(body).toContain("Vacation Policy");
+    expect(body).toContain('Answer.');
+    expect(body).toContain('Vacation Policy');
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
   });
 
-  it("rate-limit blocked: replies with rate-limit message and does not call downstream", async () => {
+  it('rate-limit blocked: replies with rate-limit message and does not call downstream', async () => {
     const pipeline = {
       zremrangebyscore: () => pipeline,
       zcard: () => pipeline,
@@ -270,17 +270,17 @@ describe("query pipeline integration", () => {
     const redis = {
       pipeline: () => pipeline,
       get: async () => null,
-      set: async () => "OK" as const,
+      set: async () => 'OK' as const,
     };
     const { handler } = buildDeps({ redis });
     const { say, calls } = makeSay();
 
     await handler.processQuery({
-      userId: "U1",
-      text: "x",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'x',
+      channelId: 'C1',
       say,
-      client: fakeBoltClient("u1@corp.example"),
+      client: fakeBoltClient('u1@corp.example'),
     });
 
     expect(calls).toHaveLength(1);
@@ -289,23 +289,23 @@ describe("query pipeline integration", () => {
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
   });
 
-  it("missing Slack profile email: replies with profile-email error, no directory/retrieval", async () => {
+  it('missing Slack profile email: replies with profile-email error, no directory/retrieval', async () => {
     const { handler } = buildDeps({});
     const { say, calls } = makeSay();
 
     await handler.processQuery({
-      userId: "U1",
-      text: "x",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'x',
+      channelId: 'C1',
       say,
       client: fakeBoltClient(null),
     });
 
-    expect(JSON.stringify(calls[0])).toContain("Slack profile email");
+    expect(JSON.stringify(calls[0])).toContain('Slack profile email');
     expect(bedrockMock.commandCalls(InvokeModelCommand)).toHaveLength(0);
   });
 
-  it("identity failure: WorkOS returns no directory user, replies with identity error", async () => {
+  it('identity failure: WorkOS returns no directory user, replies with identity error', async () => {
     ddbMock.on(GetItemCommand).resolves({});
     ddbMock.on(PutItemCommand).resolves({});
     // WorkOS auths with a Bearer API key, so there is only one outbound
@@ -315,22 +315,22 @@ describe("query pipeline integration", () => {
     const { say, calls } = makeSay();
 
     await handler.processQuery({
-      userId: "U1",
-      text: "x",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'x',
+      channelId: 'C1',
       say,
-      client: fakeBoltClient("nobody@corp.example"),
+      client: fakeBoltClient('nobody@corp.example'),
     });
 
-    expect(JSON.stringify(calls[0])).toContain("linked to your workforce directory");
+    expect(JSON.stringify(calls[0])).toContain('linked to your workforce directory');
   });
 
-  it("all OAuth tokens missing: replies with OAuth prompt containing a signed link per source", async () => {
+  it('all OAuth tokens missing: replies with OAuth prompt containing a signed link per source', async () => {
     ddbMock.on(GetItemCommand).resolves({
       Item: {
-        slackUserId: { S: "U1" },
-        externalUserId: { S: "user-1" },
-        email: { S: "u1@corp.example" },
+        slackUserId: { S: 'U1' },
+        externalUserId: { S: 'user-1' },
+        email: { S: 'u1@corp.example' },
         ttl: { N: String(Math.floor(NOW / 1000) + 600) },
       },
     });
@@ -339,69 +339,69 @@ describe("query pipeline integration", () => {
     const { say, calls } = makeSay();
 
     await handler.processQuery({
-      userId: "U1",
-      text: "x",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'x',
+      channelId: 'C1',
       say,
-      client: fakeBoltClient("u1@corp.example"),
+      client: fakeBoltClient('u1@corp.example'),
     });
 
     const body = JSON.stringify(calls[0]);
-    expect(body).toContain("t=sig-user-1-notion");
-    expect(body).toContain("t=sig-user-1-atlassian");
-    expect(body).toContain("t=sig-user-1-google");
+    expect(body).toContain('t=sig-user-1-notion');
+    expect(body).toContain('t=sig-user-1-atlassian');
+    expect(body).toContain('t=sig-user-1-google');
     expect(bedrockMock.commandCalls(InvokeModelCommand)).toHaveLength(0);
   });
 
-  it("ACL redaction: a 403 on one source produces a redaction notice but the answer still emits", async () => {
+  it('ACL redaction: a 403 on one source produces a redaction notice but the answer still emits', async () => {
     ddbMock.on(GetItemCommand).resolves({
       Item: {
-        slackUserId: { S: "U1" },
-        externalUserId: { S: "user-1" },
-        email: { S: "u1@corp.example" },
+        slackUserId: { S: 'U1' },
+        externalUserId: { S: 'user-1' },
+        email: { S: 'u1@corp.example' },
         ttl: { N: String(Math.floor(NOW / 1000) + 600) },
       },
     });
     bedrockMock
       .on(InvokeModelCommand)
       .resolvesOnce(bedrockBody({ embedding: [0.1] }))
-      .resolvesOnce(bedrockBody({ content: [{ text: "ok" }] }));
-    sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
+      .resolvesOnce(bedrockBody({ content: [{ text: 'ok' }] }));
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: 'm-1' });
 
     const probeFetch = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (new URL(url).hostname === "api.notion.com")
+      const url = typeof input === 'string' ? input : input.toString();
+      if (new URL(url).hostname === 'api.notion.com')
         return jsonResponse({ ok: true }, { status: 200 });
       return jsonResponse({}, { status: 403 });
     }) as unknown as typeof fetch;
 
     const backend = fakeBackend([
       hit({
-        docId: "notion:page:a",
-        source: "notion",
-        url: "https://notion.so/a",
-        title: "A",
-        chunkText: "x",
-        lastModified: "2026-04-01",
+        docId: 'notion:page:a',
+        source: 'notion',
+        url: 'https://notion.so/a',
+        title: 'A',
+        chunkText: 'x',
+        lastModified: '2026-04-01',
       }),
       hit({
-        docId: "drive:file:b",
-        source: "drive",
-        url: "https://d/b",
-        title: "B",
-        chunkText: "y",
-        lastModified: "2026-04-02",
+        docId: 'drive:file:b',
+        source: 'drive',
+        url: 'https://d/b',
+        title: 'B',
+        chunkText: 'y',
+        lastModified: '2026-04-02',
       }),
     ]);
 
     const { handler } = buildDeps({ fetchImpl: probeFetch, backend });
     const { say, calls } = makeSay();
     await handler.processQuery({
-      userId: "U1",
-      text: "what?",
-      channelId: "C1",
+      userId: 'U1',
+      text: 'what?',
+      channelId: 'C1',
       say,
-      client: fakeBoltClient("u1@corp.example"),
+      client: fakeBoltClient('u1@corp.example'),
     });
 
     const body = JSON.stringify(calls[0]);
@@ -410,7 +410,7 @@ describe("query pipeline integration", () => {
   });
 });
 
-describe("query handler lifecycle (registration + graceful drain)", () => {
+describe('query handler lifecycle (registration + graceful drain)', () => {
   beforeEach(() => {
     ddbMock.reset();
     bedrockMock.reset();
@@ -419,7 +419,7 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
 
   // Capture the listeners registerWith() hands to Bolt so we can drive them
   // directly — the same wrappers that feed the in-flight set.
-  function captureListeners(handler: ReturnType<typeof buildDeps>["handler"]) {
+  function captureListeners(handler: ReturnType<typeof buildDeps>['handler']) {
     let mention: ((args: unknown) => Promise<void>) | undefined;
     let message: ((args: unknown) => Promise<void>) | undefined;
     const app = {
@@ -437,12 +437,12 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
     };
   }
 
-  it("drainInFlight resolves immediately when nothing is in flight", async () => {
+  it('drainInFlight resolves immediately when nothing is in flight', async () => {
     const { handler } = buildDeps({});
     await expect(handler.drainInFlight(1000)).resolves.toBeUndefined();
   });
 
-  it("tracks an in-flight app_mention and drainInFlight returns at the deadline instead of hanging", async () => {
+  it('tracks an in-flight app_mention and drainInFlight returns at the deadline instead of hanging', async () => {
     const { handler } = buildDeps({});
     const { mention } = captureListeners(handler);
 
@@ -456,7 +456,7 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
     const { say } = makeSay();
 
     const handled = mention({
-      event: { user: "U1", text: "<@BOT> hi", ts: "t1", channel: "C1" },
+      event: { user: 'U1', text: '<@BOT> hi', ts: 't1', channel: 'C1' },
       say,
       client: hangingClient,
     });
@@ -472,7 +472,7 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
     await handled;
   });
 
-  it("tracks an in-flight DM message and drains cleanly once it completes", async () => {
+  it('tracks an in-flight DM message and drains cleanly once it completes', async () => {
     const { handler } = buildDeps({});
     const { message } = captureListeners(handler);
     const { say } = makeSay();
@@ -480,7 +480,7 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
     // No Slack email → the pipeline replies with the profile-email error and
     // completes quickly, draining the in-flight entry.
     await message({
-      message: { channel_type: "im", text: "hi", user: "U1", channel: "C1", ts: "t1" },
+      message: { channel_type: 'im', text: 'hi', user: 'U1', channel: 'C1', ts: 't1' },
       say,
       client: fakeBoltClient(null),
     });

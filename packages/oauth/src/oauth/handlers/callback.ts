@@ -17,17 +17,17 @@ import {
   UserMismatchError,
   MissingCredentialsError,
   errorMessage,
-} from "../errors.js";
-import { logger } from "../logger.js";
-import { assertStateFresh, clearStateCookie, readStateCookie, verifyState } from "../state.js";
+} from '../errors.js';
+import { logger } from '../logger.js';
+import { assertStateFresh, clearStateCookie, readStateCookie, verifyState } from '../state.js';
 import type {
   ClientCredentials,
   OAuthProvider,
   OAuthRouterConfig,
   RequestHandler,
   TokenGrant,
-} from "../types.js";
-import { buildTokenRequest, extractProvider, postForm } from "./shared.js";
+} from '../types.js';
+import { buildTokenRequest, extractProvider, postForm } from './shared.js';
 
 export interface CallbackDeps {
   fetchImpl?: typeof fetch;
@@ -44,7 +44,7 @@ export function createCallbackHandler(
 
   return async (req) => {
     try {
-      const providerName = extractProvider(req.url, "callback");
+      const providerName = extractProvider(req.url, 'callback');
       const adapter: OAuthProvider | undefined = config.providers[providerName];
       if (!adapter) throw new UnknownProviderError(providerName);
 
@@ -52,8 +52,8 @@ export function createCallbackHandler(
       if (!creds) throw new MissingCredentialsError(providerName);
 
       const u = new URL(req.url);
-      const code = u.searchParams.get("code");
-      const stateNonce = u.searchParams.get("state");
+      const code = u.searchParams.get('code');
+      const stateNonce = u.searchParams.get('state');
       if (!code || !stateNonce) throw new StateMissingError();
 
       const signed = readStateCookie(req);
@@ -69,13 +69,13 @@ export function createCallbackHandler(
 
       // Exact-match redirect URI. Some providers echo it back on the callback;
       // where they don't, we still compare against the configured value used in start.
-      const echoedRedirect = u.searchParams.get("redirect_uri");
+      const echoedRedirect = u.searchParams.get('redirect_uri');
       if (echoedRedirect && echoedRedirect !== creds.redirectUri) {
         throw new RedirectMismatchError(providerName);
       }
 
       const fields: Record<string, string> = {
-        grant_type: "authorization_code",
+        grant_type: 'authorization_code',
         code,
         redirect_uri: creds.redirectUri,
       };
@@ -89,8 +89,8 @@ export function createCallbackHandler(
       if (!grant.accessToken) {
         throw new ProviderError(
           providerName,
-          "missing_access_token",
-          "token response missing access_token",
+          'missing_access_token',
+          'token response missing access_token',
         );
       }
 
@@ -99,8 +99,8 @@ export function createCallbackHandler(
       return new Response(null, {
         status: 302,
         headers: {
-          location: state.returnTo || "/",
-          "set-cookie": clearStateCookie(config.cookieDomain),
+          location: state.returnTo || '/',
+          'set-cookie': clearStateCookie(config.cookieDomain),
         },
       });
     } catch (err) {
@@ -112,41 +112,41 @@ export function createCallbackHandler(
 function handleCallbackError(err: unknown, cookieDomain?: string): Response {
   const clear = clearStateCookie(cookieDomain);
   if (err instanceof StateTamperedError || err instanceof StateMissingError) {
-    logger.warn("callback rejected — state invalid", { code: (err as OAuthError).code });
-    return new Response("state_invalid", { status: 400, headers: { "set-cookie": clear } });
+    logger.warn('callback rejected — state invalid', { code: (err as OAuthError).code });
+    return new Response('state_invalid', { status: 400, headers: { 'set-cookie': clear } });
   }
   if (err instanceof StateExpiredError) {
-    logger.warn("callback rejected — state expired");
-    return new Response("state_expired", { status: 400, headers: { "set-cookie": clear } });
+    logger.warn('callback rejected — state expired');
+    return new Response('state_expired', { status: 400, headers: { 'set-cookie': clear } });
   }
   if (err instanceof UserMismatchError) {
-    logger.warn("callback rejected — user mismatch");
-    return new Response("user_mismatch", { status: 400, headers: { "set-cookie": clear } });
+    logger.warn('callback rejected — user mismatch');
+    return new Response('user_mismatch', { status: 400, headers: { 'set-cookie': clear } });
   }
   if (err instanceof RedirectMismatchError) {
-    logger.warn("callback rejected — redirect mismatch", { provider: err.provider });
-    return new Response("redirect_mismatch", { status: 400, headers: { "set-cookie": clear } });
+    logger.warn('callback rejected — redirect mismatch', { provider: err.provider });
+    return new Response('redirect_mismatch', { status: 400, headers: { 'set-cookie': clear } });
   }
   if (err instanceof UnauthenticatedError) {
-    logger.warn("callback rejected — unauthenticated (resolveUserId returned null)");
-    return new Response("unauthenticated", { status: 401, headers: { "set-cookie": clear } });
+    logger.warn('callback rejected — unauthenticated (resolveUserId returned null)');
+    return new Response('unauthenticated', { status: 401, headers: { 'set-cookie': clear } });
   }
   if (err instanceof UnknownProviderError) {
-    logger.warn("callback rejected — unknown provider", { provider: err.provider });
+    logger.warn('callback rejected — unknown provider', { provider: err.provider });
     return new Response(err.message, { status: 404 });
   }
   if (err instanceof ProviderError) {
-    logger.warn("callback provider error", {
+    logger.warn('callback provider error', {
       provider: err.provider,
       code: err.code,
       status: err.status,
     });
-    return new Response(err.code, { status: 502, headers: { "set-cookie": clear } });
+    return new Response(err.code, { status: 502, headers: { 'set-cookie': clear } });
   }
   if (err instanceof OAuthError) {
-    logger.warn("callback error", { code: err.code, provider: err.provider });
-    return new Response(err.code, { status: 400, headers: { "set-cookie": clear } });
+    logger.warn('callback error', { code: err.code, provider: err.provider });
+    return new Response(err.code, { status: 400, headers: { 'set-cookie': clear } });
   }
-  logger.error("callback unexpected error", { error: errorMessage(err) });
-  return new Response("internal_error", { status: 500, headers: { "set-cookie": clear } });
+  logger.error('callback unexpected error', { error: errorMessage(err) });
+  return new Response('internal_error', { status: 500, headers: { 'set-cookie': clear } });
 }

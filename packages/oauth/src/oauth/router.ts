@@ -4,13 +4,13 @@
 // exposes the steady-state `getValidToken` / `revokeTokens` /
 // `revokeAllForUser` calls.
 
-import { createCallbackHandler, type CallbackDeps } from "./handlers/callback.js";
-import { createRefreshHandler } from "./handlers/refresh.js";
-import { createRevokeHandler, type RevokeDeps } from "./handlers/revoke.js";
-import { createStartHandler } from "./handlers/start.js";
-import { logger } from "./logger.js";
-import { TokenRefresher } from "./refresh.js";
-import type { OAuthRouter, OAuthRouterConfig } from "./types.js";
+import { createCallbackHandler, type CallbackDeps } from './handlers/callback.js';
+import { createRefreshHandler } from './handlers/refresh.js';
+import { createRevokeHandler, type RevokeDeps } from './handlers/revoke.js';
+import { createStartHandler } from './handlers/start.js';
+import { logger } from './logger.js';
+import { TokenRefresher } from './refresh.js';
+import type { OAuthRouter, OAuthRouterConfig } from './types.js';
 
 export interface CreateOAuthRouterDeps {
   /** Injectable for tests — used by callback, refresh, and revoke handlers + refresher. */
@@ -24,7 +24,7 @@ export function createOAuthRouter(
   deps: CreateOAuthRouterDeps = {},
 ): OAuthRouter {
   if (!config.stateSigningSecret || config.stateSigningSecret.length < 16) {
-    throw new Error("stateSigningSecret must be at least 16 characters");
+    throw new Error('stateSigningSecret must be at least 16 characters');
   }
 
   const leadTime = config.leadTimeSeconds ?? 60;
@@ -61,9 +61,9 @@ export function createOAuthRouter(
       await config.storage.delete(userId, provider);
       if (config.revocationEmitter) {
         try {
-          await config.revocationEmitter.emit({ userId, provider, reason: "user" });
+          await config.revocationEmitter.emit({ userId, provider, reason: 'user' });
         } catch (err) {
-          logger.warn("revocation emit failed", {
+          logger.warn('revocation emit failed', {
             provider,
             userId,
             error: (err as Error).message,
@@ -80,10 +80,10 @@ export function createOAuthRouter(
             await config.revocationEmitter.emit({
               userId,
               provider: providerName,
-              reason: "offboarding",
+              reason: 'offboarding',
             });
           } catch (err) {
-            logger.warn("revocation emit failed", {
+            logger.warn('revocation emit failed', {
               provider: providerName,
               userId,
               error: (err as Error).message,

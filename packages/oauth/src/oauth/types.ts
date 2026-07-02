@@ -37,7 +37,7 @@ export interface TokenStorage {
  * `refresh-failed` — the provider rejected the refresh; the token has
  * been deleted and re-auth is required.
  */
-export type RevocationReason = "user" | "offboarding" | "refresh-failed";
+export type RevocationReason = 'user' | 'offboarding' | 'refresh-failed';
 
 /**
  * Optional sink for revocation events. Default is a no-op; consumers may
@@ -72,7 +72,7 @@ export interface OAuthProvider {
    * - `"basic"` — `Authorization: Basic base64(client_id:client_secret)`
    *   header; credentials are NOT in the body. Required by Notion.
    */
-  readonly tokenAuthStyle?: "body" | "basic";
+  readonly tokenAuthStyle?: 'body' | 'basic';
 
   parseTokenResponse(raw: unknown): TokenGrant;
   /**

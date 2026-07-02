@@ -10,30 +10,30 @@
  * collector sidecar + Grafana Cloud Mimir; there is nothing useful to
  * assert here without spinning up an OTel SDK + exporter.
  */
-import { describe, it, expect } from "vitest";
-import { timing, counter, flushMetrics } from "./metrics.js";
+import { describe, it, expect } from 'vitest';
+import { timing, counter, flushMetrics } from './metrics.js';
 
-describe("metrics (OTel no-op surface)", () => {
-  it("timing() does not throw under the no-op API", () => {
-    expect(() => timing("query.latency_ms", 123)).not.toThrow();
-    expect(() => timing("query.latency_ms", 456, { stage: "embed" })).not.toThrow();
+describe('metrics (OTel no-op surface)', () => {
+  it('timing() does not throw under the no-op API', () => {
+    expect(() => timing('query.latency_ms', 123)).not.toThrow();
+    expect(() => timing('query.latency_ms', 456, { stage: 'embed' })).not.toThrow();
   });
 
-  it("counter() does not throw under the no-op API", () => {
-    expect(() => counter("ratelimit.hit")).not.toThrow();
-    expect(() => counter("ratelimit.hit", 2, { limit_type: "user" })).not.toThrow();
+  it('counter() does not throw under the no-op API', () => {
+    expect(() => counter('ratelimit.hit')).not.toThrow();
+    expect(() => counter('ratelimit.hit', 2, { limit_type: 'user' })).not.toThrow();
   });
 
-  it("reuses instrument handles across calls (cached by name)", () => {
+  it('reuses instrument handles across calls (cached by name)', () => {
     // Same name, same attributes — must not throw or leak.
     for (let i = 0; i < 5; i++) {
-      counter("redaction.count");
-      timing("query.latency_ms", i);
+      counter('redaction.count');
+      timing('query.latency_ms', i);
     }
     expect(true).toBe(true);
   });
 
-  it("flushMetrics resolves cleanly (no-op)", async () => {
+  it('flushMetrics resolves cleanly (no-op)', async () => {
     await expect(flushMetrics()).resolves.toBeUndefined();
   });
 });

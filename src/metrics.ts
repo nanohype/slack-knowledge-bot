@@ -17,16 +17,16 @@
  * intentional: tests don't need a mock metrics backend, and adding one would
  * just re-assert the SDK's own contract.
  */
-import { metrics as otelMetrics, type Counter, type Histogram } from "@opentelemetry/api";
+import { metrics as otelMetrics, type Counter, type Histogram } from '@opentelemetry/api';
 
-const METER_NAME = "slack-knowledge-bot";
+const METER_NAME = 'slack-knowledge-bot';
 
 // Self-prefix every instrument with the service namespace so the Prometheus
 // series are deterministic — `query.latency_ms` becomes
 // `slack_knowledge_bot_query_latency_ms_bucket` purely from the instrument name
 // (OTLP→Prometheus lowercases dots to underscores + adds the type suffix), with
 // no dependency on a collector-side namespace rewrite.
-const NAMESPACE = "slack_knowledge_bot";
+const NAMESPACE = 'slack_knowledge_bot';
 const qualify = (name: string): string => `${NAMESPACE}.${name}`;
 
 const counters = new Map<string, Counter>();
@@ -44,7 +44,7 @@ function getCounter(name: string): Counter {
 function getHistogram(name: string): Histogram {
   let h = histograms.get(name);
   if (!h) {
-    h = otelMetrics.getMeter(METER_NAME).createHistogram(qualify(name), { unit: "ms" });
+    h = otelMetrics.getMeter(METER_NAME).createHistogram(qualify(name), { unit: 'ms' });
     histograms.set(name, h);
   }
   return h;

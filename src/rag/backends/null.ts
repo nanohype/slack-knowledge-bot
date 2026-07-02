@@ -8,7 +8,7 @@
  * for tests that exercise the rest of the pipeline without caring about
  * retrieval results.
  */
-import type { RetrievalBackend } from "./types.js";
+import type { RetrievalBackend } from './types.js';
 
 export function createNullBackend(): RetrievalBackend {
   return {

@@ -11,7 +11,7 @@
  * their native relevance — the retriever only uses order, not score
  * magnitudes.
  */
-import type { RetrievalHit } from "../../connectors/types.js";
+import type { RetrievalHit } from '../../connectors/types.js';
 
 export interface RetrievalBackend {
   /**

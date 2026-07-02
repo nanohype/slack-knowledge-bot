@@ -1,6 +1,6 @@
-import type { RetrievalHit } from "./types.js";
+import type { RetrievalHit } from './types.js';
 
-export type SourceType = RetrievalHit["source"];
+export type SourceType = RetrievalHit['source'];
 
 /**
  * A connector verifier probes the source's API to confirm the asking

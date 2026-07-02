@@ -22,18 +22,18 @@
  * checkout (`../nanohype` relative to this repo). CI checks out
  * nanohype/nanohype and points NANOHYPE_DIR at it.
  */
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
-import { join, dirname, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { join, dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const NANOHYPE_DIR = process.env.NANOHYPE_DIR ?? join(ROOT, "..", "nanohype");
-const LIB_SRC = join(NANOHYPE_DIR, "library", "runtime", "src");
-const DEST = join(ROOT, "src", "runtime");
-const CHECK = process.argv.includes("--check");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const NANOHYPE_DIR = process.env.NANOHYPE_DIR ?? join(ROOT, '..', 'nanohype');
+const LIB_SRC = join(NANOHYPE_DIR, 'library', 'runtime', 'src');
+const DEST = join(ROOT, 'src', 'runtime');
+const CHECK = process.argv.includes('--check');
 
 /** The runtime modules this app consumes. Add here when adopting another. */
-const MODULES = ["circuit-breaker.ts", "pii.ts", "workos-directory.ts"];
+const MODULES = ['circuit-breaker.ts', 'pii.ts', 'workos-directory.ts'];
 
 async function main() {
   try {
@@ -53,12 +53,12 @@ async function main() {
     const src = join(LIB_SRC, file);
     const dest = join(DEST, file);
     const rel = relative(ROOT, dest);
-    const want = await readFile(src, "utf8");
+    const want = await readFile(src, 'utf8');
 
     if (CHECK) {
       let have = null;
       try {
-        have = await readFile(dest, "utf8");
+        have = await readFile(dest, 'utf8');
       } catch {
         // missing counts as drift
       }

@@ -43,7 +43,7 @@ spec:
   # Soft threshold; kill-switch fires at 120% (USD 6000) when KillSwitchEnabled
   # is true. Higher than marshal's because slack-knowledge-bot drives both Bedrock LLM
   # calls (Claude Sonnet 4.6) and Bedrock embeddings (Titan) at every query.
-  monthlyUsd: "5000"
+  monthlyUsd: '5000'
   alertThresholdsPercent: [50, 80, 100]
   killSwitchEnabled: true
 ---

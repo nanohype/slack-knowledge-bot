@@ -12,9 +12,9 @@
  * trace IDs); callers that still want a local UUID for user-facing error
  * messages can keep their own variable.
  */
-import { trace, SpanStatusCode, type Span } from "@opentelemetry/api";
+import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
 
-const tracer = trace.getTracer("slack-knowledge-bot");
+const tracer = trace.getTracer('slack-knowledge-bot');
 
 export interface RequestContext {
   traceId?: string;
@@ -22,7 +22,7 @@ export interface RequestContext {
 
 export const requestContext = {
   run<T>(_legacyCtx: RequestContext, fn: () => Promise<T>): Promise<T> {
-    return tracer.startActiveSpan("slack.query", async (span: Span) => {
+    return tracer.startActiveSpan('slack.query', async (span: Span) => {
       try {
         const result = await fn();
         span.setStatus({ code: SpanStatusCode.OK });

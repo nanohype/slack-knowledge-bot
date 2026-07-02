@@ -1,4 +1,4 @@
-import { AclProbeError, registerVerifier } from "./registry.js";
+import { AclProbeError, registerVerifier } from './registry.js';
 
 const CONFLUENCE_TIMEOUT_MS = 3000;
 
@@ -14,18 +14,18 @@ const CONFLUENCE_TIMEOUT_MS = 3000;
 const CONFLUENCE_DOC_ID_RE = /^confluence:([0-9a-f-]{36}):([^:]+)$/i;
 
 registerVerifier({
-  source: "confluence",
+  source: 'confluence',
   async probe(hit, token, fetchImpl) {
     const match = CONFLUENCE_DOC_ID_RE.exec(hit.docId);
-    if (!match) throw new AclProbeError(400, "confluence");
+    if (!match) throw new AclProbeError(400, 'confluence');
     const [, cloudId, pageId] = match;
     const response = await fetchImpl(
       `https://api.atlassian.com/ex/confluence/${cloudId}/wiki/rest/api/content/${pageId}?expand=version`,
       {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(CONFLUENCE_TIMEOUT_MS),
       },
     );
-    if (!response.ok) throw new AclProbeError(response.status, "confluence");
+    if (!response.ok) throw new AclProbeError(response.status, 'confluence');
   },
 });

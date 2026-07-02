@@ -8,33 +8,33 @@
  * factories can be re-wired for a different client's stack by
  * swapping the SDK clients built here.
  */
-import { App } from "@slack/bolt";
-import { SQSClient } from "@aws-sdk/client-sqs";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
-import { NodeHttpHandler } from "@smithy/node-http-handler";
-import { Pool } from "pg";
-import http from "node:http";
-import { readFileSync } from "node:fs";
-import { config } from "./config/index.js";
-import { createRateLimiter } from "./ratelimit/redis-limiter.js";
-import { createWorkOSResolver } from "./identity/workos-resolver.js";
-import { createAclGuard } from "./connectors/acl-guard.js";
-import { createRetriever } from "./rag/retriever.js";
-import { createNullBackend } from "./rag/backends/null.js";
-import { createPgvectorBackend } from "./rag/backends/pgvector.js";
-import { initSchema } from "./rag/backends/pgvector-schema.js";
-import type { RetrievalBackend } from "./rag/backends/types.js";
-import { createGenerator } from "./rag/generator.js";
-import { createAuditLogger } from "./audit/audit-logger.js";
-import { createQueryHandler } from "./slack/query-handler.js";
-import { createDisconnectCommand } from "./slack/disconnect-command.js";
-import { createSlackKnowledgeBotOAuth, SOURCE_TO_PROVIDER } from "./oauth/router.js";
-import { signOAuthStartUrl } from "./oauth/url-token.js";
-import { nodeReqToWebRequest, writeWebResponse } from "./oauth/http.js";
-import { getRedis } from "./redis.js";
-import { logger } from "./logger.js";
-import { counter, timing, flushMetrics } from "./metrics.js";
+import { App } from '@slack/bolt';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { Pool } from 'pg';
+import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { config } from './config/index.js';
+import { createRateLimiter } from './ratelimit/redis-limiter.js';
+import { createWorkOSResolver } from './identity/workos-resolver.js';
+import { createAclGuard } from './connectors/acl-guard.js';
+import { createRetriever } from './rag/retriever.js';
+import { createNullBackend } from './rag/backends/null.js';
+import { createPgvectorBackend } from './rag/backends/pgvector.js';
+import { initSchema } from './rag/backends/pgvector-schema.js';
+import type { RetrievalBackend } from './rag/backends/types.js';
+import { createGenerator } from './rag/generator.js';
+import { createAuditLogger } from './audit/audit-logger.js';
+import { createQueryHandler } from './slack/query-handler.js';
+import { createDisconnectCommand } from './slack/disconnect-command.js';
+import { createSlackKnowledgeBotOAuth, SOURCE_TO_PROVIDER } from './oauth/router.js';
+import { signOAuthStartUrl } from './oauth/url-token.js';
+import { nodeReqToWebRequest, writeWebResponse } from './oauth/http.js';
+import { getRedis } from './redis.js';
+import { logger } from './logger.js';
+import { counter, timing, flushMetrics } from './metrics.js';
 
 const TITAN_EMBEDDING_DIM = 1024;
 
@@ -68,7 +68,7 @@ const bedrock = new BedrockRuntimeClient({
 const retrievalBackend: RetrievalBackend = buildRetrievalBackend();
 
 function composePgUrlFromEnv(): string {
-  if (!config.PGHOST || !config.PGUSER || !config.PGPASSWORD) return "";
+  if (!config.PGHOST || !config.PGUSER || !config.PGPASSWORD) return '';
   const host = config.PGHOST;
   const port = config.PGPORT;
   const user = encodeURIComponent(config.PGUSER);
@@ -87,12 +87,12 @@ function buildPgSsl(): false | { ca?: string; rejectUnauthorized: boolean } {
     return { rejectUnauthorized: false };
   }
   try {
-    const ca = readFileSync(config.PG_SSL_CA_PATH, "utf8");
+    const ca = readFileSync(config.PG_SSL_CA_PATH, 'utf8');
     return { ca, rejectUnauthorized: true };
   } catch (err) {
     logger.error(
       { err, path: config.PG_SSL_CA_PATH },
-      "pg TLS: CA bundle unreadable; falling back to encrypted-but-unverified",
+      'pg TLS: CA bundle unreadable; falling back to encrypted-but-unverified',
     );
     return { rejectUnauthorized: false };
   }
@@ -101,10 +101,10 @@ function buildPgSsl(): false | { ca?: string; rejectUnauthorized: boolean } {
 function buildRetrievalBackend(): RetrievalBackend {
   const url = config.RETRIEVAL_BACKEND_URL || composePgUrlFromEnv();
   if (!url) {
-    logger.info("No retrieval backend configured — using null backend");
+    logger.info('No retrieval backend configured — using null backend');
     return createNullBackend();
   }
-  if (url.startsWith("postgres://") || url.startsWith("postgresql://")) {
+  if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
     // RDS Postgres enforces TLS (rds.force_ssl=1 in the default parameter
     // group). By default we verify the server cert against the bundled RDS
     // global CA so the link is authenticated-encrypted (MITM-resistant), not
@@ -121,12 +121,12 @@ function buildRetrievalBackend(): RetrievalBackend {
       connectionTimeoutMillis: 2_000,
       idleTimeoutMillis: 30_000,
     });
-    pool.on("error", (err) => logger.error({ err }, "pgvector pool error"));
+    pool.on('error', (err) => logger.error({ err }, 'pgvector pool error'));
     // Idempotent schema init. If the DB is unreachable on boot, log and
     // let the retriever error out at query time until it's fixed — no
     // reason to crash the task.
     void initSchema({ pool, embeddingDim: TITAN_EMBEDDING_DIM }).catch((err) =>
-      logger.error({ err }, "pgvector schema init failed; retrieval will error until fixed"),
+      logger.error({ err }, 'pgvector schema init failed; retrieval will error until fixed'),
     );
     return createPgvectorBackend({ query: pool, embeddingDim: TITAN_EMBEDDING_DIM });
   }
@@ -187,7 +187,7 @@ const queryHandler = createQueryHandler({
   oauthStorage,
   signOAuthStartUrl,
   sourceToProvider: SOURCE_TO_PROVIDER,
-  workspaceId: "slack-knowledge-bot",
+  workspaceId: 'slack-knowledge-bot',
   appBaseUrl: config.APP_BASE_URL,
   userPerHour: config.RATE_LIMIT_USER_PER_HOUR,
   workspacePerHour: config.RATE_LIMIT_WORKSPACE_PER_HOUR,
@@ -221,25 +221,25 @@ let ready = false;
 
 const httpServer = http.createServer(async (req, res) => {
   try {
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", service: "slack-knowledge-bot" }));
+    if (req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', service: 'slack-knowledge-bot' }));
       return;
     }
 
-    if (req.url === "/ready") {
-      res.writeHead(ready ? 200 : 503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: ready ? "ready" : "not_ready" }));
+    if (req.url === '/ready') {
+      res.writeHead(ready ? 200 : 503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: ready ? 'ready' : 'not_ready' }));
       return;
     }
 
-    if (req.url?.startsWith("/oauth/")) {
+    if (req.url?.startsWith('/oauth/')) {
       const webReq = await nodeReqToWebRequest(req);
       const url = new URL(webReq.url);
-      if (url.pathname.endsWith("/start")) {
+      if (url.pathname.endsWith('/start')) {
         return writeWebResponse(res, await oauth.handlers.start(webReq));
       }
-      if (url.pathname.endsWith("/callback")) {
+      if (url.pathname.endsWith('/callback')) {
         return writeWebResponse(res, await oauth.handlers.callback(webReq));
       }
     }
@@ -247,7 +247,7 @@ const httpServer = http.createServer(async (req, res) => {
     res.writeHead(404);
     res.end();
   } catch (err) {
-    logger.error({ err, url: req.url }, "http handler threw");
+    logger.error({ err, url: req.url }, 'http handler threw');
     res.writeHead(500);
     res.end();
   }
@@ -258,7 +258,7 @@ const httpServer = http.createServer(async (req, res) => {
 const SHUTDOWN_DRAIN_MS = 25_000;
 
 async function shutdown(signal: string) {
-  logger.info({ signal }, "shutting down");
+  logger.info({ signal }, 'shutting down');
   // 0) Fail readiness first so the kubelet removes this pod from the Service
   //    endpoints — new inbound (OAuth) requests stop arriving before we drain.
   ready = false;
@@ -266,7 +266,7 @@ async function shutdown(signal: string) {
   try {
     await app.stop();
   } catch (err) {
-    logger.error({ err }, "bolt stop failed");
+    logger.error({ err }, 'bolt stop failed');
   }
   // 2) Let in-flight queries (LLM + the awaited compliance audit) finish,
   //    bounded by the drain deadline — otherwise a SIGTERM mid-query drops
@@ -274,20 +274,20 @@ async function shutdown(signal: string) {
   try {
     await queryHandler.drainInFlight(SHUTDOWN_DRAIN_MS);
   } catch (err) {
-    logger.error({ err }, "in-flight query drain failed");
+    logger.error({ err }, 'in-flight query drain failed');
   }
   // 3) Flush metrics last so the drained queries' counters are exported.
   try {
     await flushMetrics();
   } catch (err) {
-    logger.error({ err }, "metrics flush on shutdown failed");
+    logger.error({ err }, 'metrics flush on shutdown failed');
   }
   httpServer.close();
   process.exit(0);
 }
 
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
-process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 // Rejections only: Bolt's Socket Mode client reconnects in a detached promise —
 // a bad SLACK_APP_TOKEN throws from there, not from `await app.start()`. Node's
@@ -295,14 +295,14 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 // crash-loops the pod before an operator can rotate secrets. Log and keep
 // serving /health + /oauth/* so the pod stays healthy and probes pass.
 // (A synchronous uncaughtException, below, is NOT swallowed — it exits.)
-process.on("unhandledRejection", (err) => {
-  logger.error({ err }, "unhandledRejection (swallowed to keep task alive)");
+process.on('unhandledRejection', (err) => {
+  logger.error({ err }, 'unhandledRejection (swallowed to keep task alive)');
 });
 // A synchronous uncaught exception leaves the process in an undefined state
 // (half-mutated module/SDK internals). Per Node guidance, log and exit so the
 // orchestrator restarts a clean pod rather than serving from a corrupt one.
-process.on("uncaughtException", (err) => {
-  logger.error({ err }, "uncaughtException; exiting for a clean restart");
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'uncaughtException; exiting for a clean restart');
   process.exit(1);
 });
 
@@ -311,7 +311,7 @@ process.on("uncaughtException", (err) => {
   try {
     await app.start();
     ready = true;
-    logger.info({ env: config.NODE_ENV }, "SlackKnowledgeBot is running");
+    logger.info({ env: config.NODE_ENV }, 'SlackKnowledgeBot is running');
   } catch (err) {
     // Bolt (Socket Mode) auth failure — usually a bad SLACK_APP_TOKEN or a
     // transient Slack outage. The HTTP server stays up so /health passes and
@@ -319,6 +319,6 @@ process.on("uncaughtException", (err) => {
     // Deployment without the container crash-looping. Readiness stays false:
     // the pod is held out of Service rotation and a rolling update stalls
     // rather than completing with a bot that can't answer queries.
-    logger.error({ err }, "Bolt start failed; HTTP server up for /health, readiness held false");
+    logger.error({ err }, 'Bolt start failed; HTTP server up for /health, readiness held false');
   }
 })();

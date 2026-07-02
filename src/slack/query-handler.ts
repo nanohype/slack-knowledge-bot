@@ -1,24 +1,24 @@
-import { randomUUID } from "node:crypto";
-import { App, AllMiddlewareArgs, SayFn, SlackEventMiddlewareArgs } from "@slack/bolt";
-import { requestContext } from "../context.js";
-import type { AclGuard } from "../connectors/acl-guard.js";
-import { SUPPORTED_SOURCES, type Source } from "../connectors/types.js";
-import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
-import type { IdentityResolver } from "../identity/types.js";
-import type { RateLimiter } from "../ratelimit/redis-limiter.js";
-import type { Retriever } from "../rag/retriever.js";
-import type { Generator } from "../rag/generator.js";
-import type { AuditLogger } from "../audit/audit-logger.js";
+import { randomUUID } from 'node:crypto';
+import { App, AllMiddlewareArgs, SayFn, SlackEventMiddlewareArgs } from '@slack/bolt';
+import { requestContext } from '../context.js';
+import type { AclGuard } from '../connectors/acl-guard.js';
+import { SUPPORTED_SOURCES, type Source } from '../connectors/types.js';
+import type { OAuthRouter, TokenStorage } from 'slack-knowledge-bot-oauth';
+import type { IdentityResolver } from '../identity/types.js';
+import type { RateLimiter } from '../ratelimit/redis-limiter.js';
+import type { Retriever } from '../rag/retriever.js';
+import type { Generator } from '../rag/generator.js';
+import type { AuditLogger } from '../audit/audit-logger.js';
 import {
   formatAnswer,
   formatError,
   formatOAuthPrompt,
   formatRateLimitMessage,
-} from "./formatter.js";
-import { buildQueryAuditEvent } from "../audit/audit-logger.js";
-import { logger } from "../logger.js";
+} from './formatter.js';
+import { buildQueryAuditEvent } from '../audit/audit-logger.js';
+import { logger } from '../logger.js';
 
-type BoltClient = AllMiddlewareArgs["client"];
+type BoltClient = AllMiddlewareArgs['client'];
 
 const EMAIL_CACHE_TTL_MS = 5 * 60 * 1000;
 // Bound the per-process email cache so a churn of distinct Slack users can't
@@ -101,7 +101,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
       }
       return email;
     } catch (err) {
-      logger.warn({ err, slackUserId }, "users.info lookup failed");
+      logger.warn({ err, slackUserId }, 'users.info lookup failed');
       return null;
     }
   }
@@ -112,8 +112,8 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
 
     const rateResult = await deps.rateLimiter.check(userId, deps.workspaceId);
     if (!rateResult.allowed) {
-      const limitType = rateResult.limitType ?? "user";
-      counter("ratelimit.hit", 1, { limit_type: limitType });
+      const limitType = rateResult.limitType ?? 'user';
+      counter('ratelimit.hit', 1, { limit_type: limitType });
       await say({
         ...formatRateLimitMessage(limitType, rateResult.resetAt, {
           userPerHour: deps.userPerHour,
@@ -129,7 +129,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     if (!slackEmail) {
       await say({
         ...formatError(
-          "Could not retrieve your Slack profile email. Make sure your account has a verified email address, then try again.",
+          'Could not retrieve your Slack profile email. Make sure your account has a verified email address, then try again.',
           traceId,
         ),
         thread_ts: ts,
@@ -140,7 +140,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     if (!identity) {
       await say({
         ...formatError(
-          "Unable to verify your identity. Ensure your Slack account is linked to your workforce directory.",
+          'Unable to verify your identity. Ensure your Slack account is linked to your workforce directory.',
           traceId,
         ),
         thread_ts: ts,
@@ -187,7 +187,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
           deps.sourceToProvider[source],
         );
       } catch (err) {
-        logger.warn({ err, source, userId: identity.externalUserId }, "getValidToken failed");
+        logger.warn({ err, source, userId: identity.externalUserId }, 'getValidToken failed');
         return null;
       }
     });
@@ -236,13 +236,13 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     try {
       await deps.auditLogger.emitQuery(auditEvent);
     } catch (err) {
-      counter("audit.emission_fail");
-      logger.error({ err }, "audit emission failed after blocking await");
+      counter('audit.emission_fail');
+      logger.error({ err }, 'audit emission failed after blocking await');
     }
 
-    timing("query.latency_ms", latencyMs);
-    counter("query.outcome", 1, { outcome: "success" });
-    if (redactedHits.length > 0) counter("redaction.count", redactedHits.length);
+    timing('query.latency_ms', latencyMs);
+    counter('query.outcome', 1, { outcome: 'success' });
+    if (redactedHits.length > 0) counter('redaction.count', redactedHits.length);
 
     logger.info(
       {
@@ -252,7 +252,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
         citationCount: citations.length,
         redactedCount: redactedHits.length,
       },
-      "query processed",
+      'query processed',
     );
   }
 
@@ -261,7 +261,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     try {
       await requestContext.run({ traceId }, () => runQuery({ ...args, traceId }));
     } catch (err) {
-      counter("query.outcome", 1, { outcome: "error" });
+      counter('query.outcome', 1, { outcome: 'error' });
       throw err;
     }
   }
@@ -270,12 +270,12 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     event,
     say,
     client,
-  }: SlackEventMiddlewareArgs<"app_mention"> & AllMiddlewareArgs): Promise<void> {
+  }: SlackEventMiddlewareArgs<'app_mention'> & AllMiddlewareArgs): Promise<void> {
     if (!event.user || !event.text) return;
-    const queryText = event.text.replace(/<@[A-Z0-9]+>/g, "").trim();
+    const queryText = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
     if (!queryText) {
       await say({
-        text: "Hi! Ask me anything about the knowledge base. Example: `@slack-knowledge-bot What is our vacation policy?`",
+        text: 'Hi! Ask me anything about the knowledge base. Example: `@slack-knowledge-bot What is our vacation policy?`',
         thread_ts: event.ts,
       });
       return;
@@ -283,7 +283,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     await processQuery({
       userId: event.user,
       text: queryText,
-      channelId: event.channel ?? "",
+      channelId: event.channel ?? '',
       say,
       client,
       ts: event.ts,
@@ -294,7 +294,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     processQuery,
     async drainInFlight(deadlineMs) {
       if (inFlight.size === 0) return;
-      logger.info({ inFlight: inFlight.size }, "draining in-flight queries before shutdown");
+      logger.info({ inFlight: inFlight.size }, 'draining in-flight queries before shutdown');
       let timer: ReturnType<typeof setTimeout> | undefined;
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, deadlineMs);
@@ -307,11 +307,11 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
       }
     },
     registerWith(app) {
-      app.event("app_mention", async (args) => {
+      app.event('app_mention', async (args) => {
         await track(handleMention(args));
       });
       app.message(async ({ message, say, client }) => {
-        if ((message as { channel_type?: string }).channel_type !== "im") return;
+        if ((message as { channel_type?: string }).channel_type !== 'im') return;
         if ((message as { subtype?: string }).subtype) return;
         const msg = message as {
           text?: string;
@@ -324,7 +324,7 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
           processQuery({
             userId: msg.user,
             text: msg.text,
-            channelId: msg.channel ?? "",
+            channelId: msg.channel ?? '',
             say,
             client,
             ts: msg.ts,

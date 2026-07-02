@@ -1,4 +1,4 @@
-version: "3"
+version: '3'
 
 vars:
   IMAGE: '{{.IMAGE | default "slack-knowledge-bot:dev"}}'
@@ -12,7 +12,7 @@ tasks:
   # === Composite ===
 
   ci:
-    desc: "Full local CI: install, oauth package, check (typecheck+lint+format+test), audit, build, helm lint/template, docker build"
+    desc: 'Full local CI: install, oauth package, check (typecheck+lint+format+test), audit, build, helm lint/template, docker build'
     cmds:
       - task: install
       - task: oauth
@@ -37,12 +37,12 @@ tasks:
   # === TypeScript ===
 
   check:
-    desc: "App gate: typecheck + lint + format:check + test"
+    desc: 'App gate: typecheck + lint + format:check + test'
     cmds:
       - npm run check
 
   oauth:
-    desc: "slack-knowledge-bot-oauth package: lint + typecheck + test + build"
+    desc: 'slack-knowledge-bot-oauth package: lint + typecheck + test + build'
     dir: packages/oauth
     cmds:
       - npm run lint
@@ -82,14 +82,14 @@ tasks:
   # === Docker ===
 
   docker:build:
-    desc: "Build the container image (no push)"
+    desc: 'Build the container image (no push)'
     cmds:
       - docker build -t {{.IMAGE}} .
 
   # === Security ===
 
   security:scan:
-    desc: "Run security scanners (gitleaks + trivy config) if available locally"
+    desc: 'Run security scanners (gitleaks + trivy config) if available locally'
     cmds:
       - |
         if command -v gitleaks >/dev/null 2>&1; then

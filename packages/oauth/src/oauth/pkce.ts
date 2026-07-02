@@ -4,10 +4,10 @@
 // challenge goes on the wire to the auth server. The same verifier is
 // replayed to the token endpoint on the callback's code exchange.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from 'node:crypto';
 
 function base64url(buf: Buffer): string {
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
@@ -20,5 +20,5 @@ export function generateCodeVerifier(): string {
 
 /** S256: base64url(sha256(verifier)). */
 export function codeChallenge(verifier: string): string {
-  return base64url(createHash("sha256").update(verifier).digest());
+  return base64url(createHash('sha256').update(verifier).digest());
 }
