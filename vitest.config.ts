@@ -18,6 +18,7 @@ export default defineConfig({
         "src/rag/backends/pgvector-schema.ts", // DDL bootstrap; exercised by RDS at deploy time
         "src/oauth/router.ts", // OAuth wiring; exercised by the real provider handshake (integration only)
         "src/oauth/http.ts", // node:http ↔ Web Request bridge; covered end-to-end by smoke test
+        "src/runtime/**", // vendored from nanohype library/runtime — unit-tested upstream; byte-identity enforced by scripts/sync-runtime.mjs --check
         "src/test-setup.ts",
         "src/**/*.test.ts",
       ],

@@ -28,7 +28,7 @@
 | File | Tests | Coverage Target |
 |------|-------|----------------|
 | `tests/acl-guard.test.ts` | ACL grant, ACL redact (403), missing token, network timeout, multi-source | 100% branch |
-| `tests/pii-scrubber.test.ts` | Email, phone, SSN, credit card, API keys, no false positives | 100% |
+| `tests/pii-scrubber.test.ts` | Union catalog at the boundary: email, phone, SSN, credit card, API keys, compensation, HR, health, DOB, customer/infra ids, no false positives | 100% |
 | `tests/rate-limiter.test.ts` | Under limit, user limit exceeded, workspace limit exceeded, Redis down (fail open) | 100% |
 | `tests/formatter.test.ts` | Fresh citation, stale citation, redacted notice, no-hits, footer | 95% |
 

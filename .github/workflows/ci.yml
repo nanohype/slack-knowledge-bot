@@ -117,6 +117,22 @@ jobs:
           fi
           echo "Slack WebClient construction invariant holds"
 
+      # src/runtime/ is vendored from nanohype library/runtime — the single
+      # source of truth (same contract as the vendored tenant-chart-base
+      # chart). The copies must stay byte-identical; a drifted copy is the
+      # defect. Checked out AFTER `npm run check` so the extra tree never
+      # feeds prettier/eslint/vitest.
+      - name: Checkout nanohype (runtime library source of truth)
+        uses: actions/checkout@v4
+        with:
+          repository: nanohype/nanohype
+          path: nanohype-src
+
+      - name: Runtime library drift check (byte-identical vendored copies)
+        run: node scripts/sync-runtime.mjs --check
+        env:
+          NANOHYPE_DIR: ${{ github.workspace }}/nanohype-src
+
       - name: Build (emit dist)
         run: npm run build
 

@@ -117,6 +117,7 @@ OAuth providers live in the in-repo `packages/oauth` package (the `slack-knowled
   - **No bare `fetch(`** — whitelisted only in `src/index.ts`, `src/connectors/`, `src/identity/workos-resolver.ts`, `src/oauth/`, and lines tagged `// allow-fetch`. Everything else takes `fetchImpl`.
   - **No `new WebClient(`** — Slack `WebClient` construction is whitelisted only in `src/index.ts` and `src/slack/`. Handlers receive the client as a dep.
 - **Fail-secure ACL, fail-open ratelimit.** An ACL probe that errors, times out, or hits an open circuit breaker drops the document (`wasRedacted: true`). The rate limiter does the opposite — if Redis is unreachable it lets the request through (throttling is not authentication).
+- **`src/runtime/` is vendored — never edit it here.** The modules (circuit breaker, PII union catalog, WorkOS Directory client) are byte-identical copies of nanohype `library/runtime/src/`, the single source of truth. Fix upstream, then `npm run sync:runtime`; CI's `sync:runtime:check` fails on any drift. Unit tests live upstream — cover the modules at this repo's integration points.
 - TypeScript strict, ESM NodeNext, Node ≥ 24. Zod at every boundary. Pino JSON to stderr with OTel `trace_id`/`span_id` correlation. Explicit timeouts on every external call. ESLint flat config + typescript-eslint v8 (no warnings), Prettier.
 - Coverage thresholds: 75 / 60 / 75 / 75 (statements / branches / functions / lines).
 
