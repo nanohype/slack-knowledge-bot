@@ -8,3 +8,7 @@ packages
 
 chart/templates
 chart/dashboards
+
+# vendored from nanohype library/runtime — byte-identical to upstream
+# (formatted there); local rewrites would fail `sync-runtime.mjs --check`
+src/runtime

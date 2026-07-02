@@ -20,7 +20,7 @@ import { z } from "zod";
 import type { RetrievalHit } from "../connectors/types.js";
 import type { RetrievalBackend } from "./backends/types.js";
 import { logger } from "../logger.js";
-import { CircuitOpenError, createCircuitBreaker } from "../util/circuit-breaker.js";
+import { CircuitOpenError, createCircuitBreaker } from "../runtime/circuit-breaker.js";
 
 const EmbeddingResponseSchema = z.object({
   embedding: z.array(z.number()).min(1),

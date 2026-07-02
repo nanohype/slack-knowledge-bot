@@ -1,42 +1,37 @@
 /**
  * IdentityResolver backed by WorkOS Directory Sync.
  *
- * Resolves Slack user → canonical workforce-directory user ID by listing
- * users in the configured directory and matching on email. The result is
- * cached in DynamoDB with a 1-hour TTL so the hot path skips the API
- * call on repeat queries.
+ * Resolves Slack user → canonical workforce-directory user ID by
+ * matching on email, caching the result in DynamoDB with a 1-hour TTL
+ * so the hot path skips the API call on repeat queries.
  *
- * WorkOS's `/directory_users` endpoint does NOT support filtering by
- * email — the documented query params are `directory`, `group`, `limit`,
- * `before`, `after`, `order`. Passing `email=` returns 422. So we list
- * with `limit=100` and paginate via `after` until we find a match or
- * exhaust the directory. For larger directories this is still fast in
- * practice because (a) results cache for 1h per user, (b) lookups are
- * off the user-facing hot path until identity cache warms.
+ * The raw directory access — Bearer-key auth, `limit=100` cursor
+ * pagination via `after`, client-side email matching (WorkOS's
+ * `/directory_users` rejects an `email=` filter with 422), primary-email
+ * selection, and the bounded-page runaway guard — lives in the vendored
+ * org-wide client (`src/runtime/workos-directory.ts`, source of truth in
+ * nanohype library/runtime). This module owns what the library
+ * deliberately leaves to the consumer:
+ *
+ *   - the DynamoDB identity cache (get + TTL check, write-back on hit)
+ *   - per-request HTTP deadlines (`AbortSignal.timeout` wrapped around
+ *     the injected fetch before it is handed to the client's fetch port)
+ *   - the fail-soft contract (any WorkOS failure → log + null, never a
+ *     thrown error into the query pipeline)
  *
  * WorkOS auth is a single Bearer API key — no client-credentials token
  * exchange, so (unlike Okta) there's no service-account token refresh,
  * no L1/L2 cache for it, and no `/token` roundtrip on cold start.
  *
  * All external I/O is injected:
- *   - `fetchImpl: typeof fetch` for the WorkOS HTTP call
+ *   - `fetchImpl: typeof fetch` for the WorkOS HTTP calls
  *   - `ddbClient`               for the Slack→external identity cache
  *
  * Tests pass `vi.fn<typeof fetch>()` and an `aws-sdk-client-mock`ed
  * DynamoDBClient. No vi.mock of SDK packages.
- *
- * WorkOS Directory Users response shape (the subset we use):
- *   {
- *     data: [{
- *       id: "directory_user_01…",
- *       email: "…",                                    // top-level
- *       emails: [{ primary, value, type }] | [],       // sometimes empty
- *       …
- *     }],
- *     list_metadata: { before, after }
- *   }
  */
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { createWorkOsDirectoryClient } from "../runtime/workos-directory.js";
 import { logger } from "../logger.js";
 import type { IdentityResolver, ResolvedIdentity } from "./types.js";
 
@@ -51,30 +46,21 @@ export interface WorkOSResolverConfig {
   now?: () => number;
 }
 
-interface WorkOSDirectoryUser {
-  id: string;
-  email?: string;
-  emails?: Array<{ primary: boolean; value: string; type?: string }>;
-}
-
-interface WorkOSDirectoryUsersResponse {
-  data: WorkOSDirectoryUser[];
-  list_metadata?: { after?: string | null };
-}
-
-const WORKOS_PAGE_SIZE = 100;
-const MAX_PAGES = 50;
-
-function primaryEmailOf(user: WorkOSDirectoryUser): string | null {
-  if (user.email) return user.email;
-  const emails = user.emails ?? [];
-  return emails.find((e) => e.primary)?.value ?? emails[0]?.value ?? null;
-}
-
 export function createWorkOSResolver(deps: WorkOSResolverConfig): IdentityResolver {
-  const baseUrl = deps.baseUrl ?? "https://api.workos.com";
   const timeout = deps.httpTimeoutMs ?? 3000;
   const now = deps.now ?? (() => Date.now());
+
+  // Every directory call carries an explicit deadline: wrap the injected
+  // fetch so the vendored client's fetch port inherits it per request.
+  const timedFetch: typeof fetch = (input, init) =>
+    deps.fetchImpl(input, { ...init, signal: AbortSignal.timeout(timeout) });
+
+  const directory = createWorkOsDirectoryClient({
+    apiKey: deps.workosApiKey,
+    directoryId: deps.workosDirectoryId,
+    ...(deps.baseUrl !== undefined ? { baseUrl: deps.baseUrl } : {}),
+    fetchImpl: timedFetch,
+  });
 
   async function getCached(slackUserId: string): Promise<ResolvedIdentity | null> {
     const nowSec = Math.floor(now() / 1000);
@@ -120,42 +106,15 @@ export function createWorkOSResolver(deps: WorkOSResolverConfig): IdentityResolv
         logger.debug({ slackUserId, source: "cache" }, "identity resolved from cache");
         return cached;
       }
-      const wanted = slackEmail.toLowerCase();
       try {
-        let after: string | null = null;
-        for (let page = 0; page < MAX_PAGES; page++) {
-          const url = new URL(`${baseUrl.replace(/\/$/, "")}/directory_users`);
-          url.searchParams.set("directory", deps.workosDirectoryId);
-          url.searchParams.set("limit", String(WORKOS_PAGE_SIZE));
-          if (after) url.searchParams.set("after", after);
-          const response = await deps.fetchImpl(url, {
-            headers: { Authorization: `Bearer ${deps.workosApiKey}` },
-            signal: AbortSignal.timeout(timeout),
-          });
-          if (!response.ok) {
-            const body = await response.text().catch(() => "<no body>");
-            logger.warn(
-              { status: response.status, url: url.toString(), body: body.slice(0, 500) },
-              "WorkOS /directory_users non-2xx",
-            );
-            throw new Error(`WorkOS /directory_users ${response.status}`);
-          }
-          const body = (await response.json()) as WorkOSDirectoryUsersResponse;
-          for (const user of body.data ?? []) {
-            const email = primaryEmailOf(user);
-            if (email && email.toLowerCase() === wanted) {
-              const identity: ResolvedIdentity = {
-                externalUserId: user.id,
-                email,
-              };
-              await writeCache(slackUserId, identity.externalUserId, identity.email);
-              return identity;
-            }
-          }
-          after = body.list_metadata?.after ?? null;
-          if (!after) break;
-        }
-        return null;
+        const user = await directory.findByEmail(slackEmail);
+        if (!user?.email) return null;
+        const identity: ResolvedIdentity = {
+          externalUserId: user.id,
+          email: user.email,
+        };
+        await writeCache(slackUserId, identity.externalUserId, identity.email);
+        return identity;
       } catch (err) {
         logger.error({ err, slackUserId }, "WorkOS identity resolution failed");
         return null;
