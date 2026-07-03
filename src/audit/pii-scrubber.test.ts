@@ -3,7 +3,7 @@ import { scrubPii } from './pii-scrubber.js';
 
 /**
  * The scrubber delegates to the vendored org-wide catalog
- * (src/runtime/pii.ts), whose per-pattern unit tests live upstream in
+ * (src/vendor/runtime/pii.ts), whose per-pattern unit tests live upstream in
  * nanohype library/runtime. These tests assert the app-facing contract:
  * the boundary is wired to the UNION policy — every category the
  * original app-local scrubber covered still redacts, plus the

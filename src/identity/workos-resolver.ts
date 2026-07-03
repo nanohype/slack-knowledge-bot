@@ -9,7 +9,7 @@
  * pagination via `after`, client-side email matching (WorkOS's
  * `/directory_users` rejects an `email=` filter with 422), primary-email
  * selection, and the bounded-page runaway guard — lives in the vendored
- * org-wide client (`src/runtime/workos-directory.ts`, source of truth in
+ * org-wide client (`src/vendor/runtime/workos-directory.ts`, source of truth in
  * nanohype library/runtime). This module owns what the library
  * deliberately leaves to the consumer:
  *
@@ -31,7 +31,7 @@
  * DynamoDBClient. No vi.mock of SDK packages.
  */
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { createWorkOsDirectoryClient } from '../runtime/workos-directory.js';
+import { createWorkOsDirectoryClient } from '../vendor/runtime/workos-directory.js';
 import { logger } from '../logger.js';
 import type { IdentityResolver, ResolvedIdentity } from './types.js';
 

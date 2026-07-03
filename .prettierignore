@@ -9,6 +9,9 @@ packages
 chart/templates
 chart/dashboards
 
-# vendored from nanohype library/runtime — byte-identical to upstream
-# (formatted there); local rewrites would fail `sync-runtime.mjs --check`
-src/runtime
+# byte-identical vendored copies (runtime modules, the sync script, the
+# ESLint base) — formatted at their source of truth; local rewrites would
+# fail `sync-vendored.mjs --check`
+src/vendor
+scripts/sync-vendored.mjs
+eslint.base.mjs

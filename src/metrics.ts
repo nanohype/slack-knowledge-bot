@@ -15,7 +15,7 @@
  * `flushMetrics` is a no-op — the SDK batches + flushes on its own schedule,
  * and shutdown is already handled by the OTel exporter.
  */
-import { createMetrics } from './runtime/metrics.js';
+import { createMetrics } from './vendor/runtime/metrics.js';
 
 const metrics = createMetrics({
   meterName: 'slack-knowledge-bot',

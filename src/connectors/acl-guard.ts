@@ -32,7 +32,7 @@ import {
   CircuitOpenError,
   createCircuitBreaker,
   type CircuitBreaker,
-} from '../runtime/circuit-breaker.js';
+} from '../vendor/runtime/circuit-breaker.js';
 
 // Side-effect imports: each module calls registerVerifier() at load time.
 import './notion.js';
