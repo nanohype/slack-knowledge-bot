@@ -27,7 +27,7 @@ spec:
       annotations:
         argocd.argoproj.io/sync-wave: '{{`{{syncWave}}`}}'
     spec:
-      project: tenant-protohype
+      project: slack-knowledge-bot
       sources:
         - repoURL: https://github.com/nanohype/slack-knowledge-bot.git
           targetRevision: main
@@ -41,7 +41,7 @@ spec:
           ref: values
       destination:
         server: '{{`{{server}}`}}'
-        namespace: tenants-protohype
+        namespace: tenants-slack-knowledge-bot
       syncPolicy:
         automated:
           prune: true
