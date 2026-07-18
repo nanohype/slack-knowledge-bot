@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.4/schema.json",
+  "extends": ["./biome.base.json"],
+  "linter": {
+    "rules": {
+      "suspicious": {
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["error", "warn"]
+          }
+        }
+      }
+    }
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!package-lock.json",
+      "!docs",
+      "!packages",
+      "!chart/templates",
+      "!chart/dashboards",
+      "!src/vendor",
+      "!scripts/sync-vendored.mjs"
+    ]
+  },
+  "overrides": [
+    {
+      "includes": ["tests/**", "vitest.config.ts"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ]
+}

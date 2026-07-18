@@ -129,12 +129,12 @@ jobs:
           fi
           echo "Slack WebClient construction invariant holds"
 
-      # Every vendored surface (src/vendor/runtime modules, .prettierrc.json,
-      # eslint.base.mjs, the tenant-chart-base chart, and the sync script
-      # itself) is a byte-identical copy of its source of truth in
-      # nanohype/nanohype, declared in scripts/vendored.json. A drifted copy
-      # is the defect. Checked out AFTER the lint/format/test steps so the
-      # extra tree never feeds prettier/eslint/vitest.
+      # Every vendored surface (src/vendor/runtime modules, biome.base.json,
+      # the tenant-chart-base chart, and the sync script itself) is a
+      # byte-identical copy of its source of truth in nanohype/nanohype,
+      # declared in scripts/vendored.json. A drifted copy is the defect.
+      # Checked out AFTER the lint/format/test steps so the extra tree
+      # never feeds biome/vitest.
       - name: Checkout nanohype (vendored source of truth)
         uses: actions/checkout@v4
         with:
