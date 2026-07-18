@@ -13,7 +13,7 @@
  * (SQS → DDB/S3). Where scrubbing happens is unchanged — only the
  * catalog behind it widened.
  */
-import { redact } from '../vendor/runtime/pii.js';
+import { redact } from "../vendor/runtime/pii.js";
 
 export function scrubPii(text: string): string {
   return redact(text);

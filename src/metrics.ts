@@ -15,11 +15,11 @@
  * `flushMetrics` is a no-op — the SDK batches + flushes on its own schedule,
  * and shutdown is already handled by the OTel exporter.
  */
-import { createMetrics } from './vendor/runtime/metrics.js';
+import { createMetrics } from "./vendor/runtime/metrics.js";
 
 const metrics = createMetrics({
-  meterName: 'slack-knowledge-bot',
-  namespace: 'slack_knowledge_bot',
+  meterName: "slack-knowledge-bot",
+  namespace: "slack_knowledge_bot",
 });
 
 export function timing(name: string, ms: number, dimensions?: Record<string, string>): void {
