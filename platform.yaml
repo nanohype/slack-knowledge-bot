@@ -1,13 +1,17 @@
-# Platform CR — declares slack-knowledge-bot as a tenant of the protohype team on the
+# Platform CR — declares slack-knowledge-bot as a tenant of the workplace team on the
 # eks-agent-platform operator. Apply once per cluster before the
 # ApplicationSet entry starts reconciling the chart.
+#
+# Both CRs live in `tenants-workplace`, the workplace team's CR-home namespace.
+# That is distinct from the workload namespace the operator provisions
+# (`tenants-slack-knowledge-bot`, derived from Platform.metadata.name).
 #
 # Two CRs declared here:
 #   - BudgetPolicy (referenced by Platform.spec.budget — required)
 #   - Platform     (the actual tenant declaration)
 #
 # What the operator reconciles from the Platform CR:
-#   - Namespace `tenants-protohype` (Pod Security Standards baseline)
+#   - Namespace `tenants-slack-knowledge-bot` (Pod Security Standards baseline)
 #   - ResourceQuota + LimitRange
 #   - Default-deny NetworkPolicy (the chart layers app-specific rules on top)
 #   - ArgoCD AppProject scoped to this Platform
@@ -39,12 +43,12 @@ apiVersion: governance.nanohype.dev/v1alpha1
 kind: BudgetPolicy
 metadata:
   name: slack-knowledge-bot
-  namespace: tenants-protohype
+  namespace: tenants-workplace
 spec:
   platformRef:
     name: slack-knowledge-bot
   # Soft threshold; kill-switch fires at 120% (USD 6000) when KillSwitchEnabled
-  # is true. Higher than marshal's because slack-knowledge-bot drives both Bedrock LLM
+  # is true. Higher than incident-response's because slack-knowledge-bot drives both Bedrock LLM
   # calls (Claude Sonnet 4.6) and Bedrock embeddings (Titan) at every query.
   monthlyUsd: '5000'
   alertThresholdsPercent: [50, 80, 100]
@@ -54,11 +58,11 @@ apiVersion: platform.nanohype.dev/v1alpha1
 kind: Platform
 metadata:
   name: slack-knowledge-bot
-  namespace: tenants-protohype
+  namespace: tenants-workplace
 spec:
   displayName: slack-knowledge-bot
   persona: support
-  tenant: protohype
+  tenant: workplace
   budget:
     name: slack-knowledge-bot
   identity:

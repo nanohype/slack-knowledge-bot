@@ -12,7 +12,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
   - `deployment.yaml` — main app pod (env from values + secret refs from ExternalSecret)
   - `service.yaml` — ClusterIP on port 3001
   - `ingress.yaml` — ingress-nginx + cert-manager TLS
-  - `serviceaccount.yaml` — name pinned to the app; bound to the landing-zone-owned slack-knowledge-bot-platform IAM role by a Pod Identity association (no role-arn annotation)
+  - `serviceaccount.yaml` — name pinned to the app; bound to the operator-minted `<env>-slack-knowledge-bot-tenant` IAM role by a Pod Identity association (no role-arn annotation)
   - `externalsecret.yaml` — pulls app secrets + DB credentials from AWS Secrets Manager
   - `networkpolicy.yaml` — default-deny + egress allow-list
   - `audit-consumer-deployment.yaml` — long-running SQS consumer (`dist/bin/audit-consumer.js`); drains the audit queue → DynamoDB + S3
@@ -25,7 +25,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
 
 The chart alone is not enough to run the app. Two sibling files at the repo root complete the tenant trio:
 
-- `../platform.yaml` — Platform CR declaring this app as a tenant of the `protohype` team. The operator reconciles Namespace, ResourceQuota, IAM role, KMS grants, S3 bucket policy from this CR. Apply once during initial setup.
+- `../platform.yaml` — Platform CR declaring this app as a tenant of the `workplace` team. The operator reconciles the `tenants-slack-knowledge-bot` Namespace, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, and the tenant IAM role from this CR. Apply once during initial setup.
 - `../gitops/applicationset-entry.yaml` — ApplicationSet entry registered into `nanohype/eks-gitops`. ArgoCD picks up the entry and rolls out this chart.
 
 ## Required landing-zone components
@@ -44,16 +44,16 @@ Bedrock invocation-logging-NONE is a Bedrock account+region setting owned by lan
 
 ## Pod identity
 
-Two IAM roles exist for this Platform tenant — different SAs, different policies, different owners:
+One IAM role serves this Platform tenant. The eks-agent-platform operator mints it from the Platform CR; every pod in the tenant binds to it through an EKS Pod Identity association:
 
-| Role                                 | Owner                                                 | Trust                                                         | Used by                                             |
-| ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- |
-| `<env>-slack-knowledge-bot-platform` | landing-zone `slack-knowledge-bot-platform` component | `system:serviceaccount:tenants-protohype:slack-knowledge-bot` | This chart's main pod + audit-consumer Deployment   |
-| `<env>-slack-knowledge-bot-tenant`   | eks-agent-platform operator                           | `system:serviceaccount:tenants-protohype:tenant-runtime`      | AgentFleet pods (if/when any land in this Platform) |
+| Role                               | Owner                       | Bound service account                                                  | Used by                                             |
+| ---------------------------------- | --------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------- |
+| `<env>-slack-knowledge-bot-tenant` | eks-agent-platform operator | `system:serviceaccount:tenants-slack-knowledge-bot:slack-knowledge-bot` | This chart's main pod + audit-consumer Deployment   |
+| `<env>-slack-knowledge-bot-tenant` | eks-agent-platform operator | `system:serviceaccount:tenants-slack-knowledge-bot:tenant-runtime`      | AgentFleet pods (if/when any land in this Platform) |
 
-The chart's `serviceaccount.yaml` creates a ServiceAccount named `slack-knowledge-bot` (pinned via `serviceAccount.name`) with no role-arn annotation. The landing-zone `slack-knowledge-bot-platform` component creates an EKS Pod Identity association binding that `(namespace, service-account)` to the IAM role, so EKS injects credentials through the standard AWS credential chain — no annotation, no role ARN in the chart. The ServiceAccount name must match the association's `service_account`, which is why it is pinned to the app name. KEDA's `aws-sqs-queue` trigger on the audit-consumer runs under its configured identity, so queue-depth scaling Just Works.
+The chart's `serviceaccount.yaml` creates a ServiceAccount named `slack-knowledge-bot` (pinned via `serviceAccount.name`) with no role-arn annotation. The landing-zone `slack-knowledge-bot-platform` component creates the EKS Pod Identity association binding that `(namespace, service-account)` to the tenant role, so EKS injects credentials through the standard AWS credential chain — no annotation, no role ARN in the chart. The ServiceAccount name must match the association's `service_account`, which is why it is pinned to the app name. KEDA's `aws-sqs-queue` trigger on the audit-consumer runs under its configured identity, so queue-depth scaling Just Works.
 
-The operator-managed role is unused by this chart today and is harmless. It only matters once an AgentFleet CR lands in the `slack-knowledge-bot` Platform.
+The role's Bedrock grant is the agent-iam baseline clamped to `Platform.spec.identity.allowedModels`. The app's substrate grants (DynamoDB, SQS, S3, KMS, Secrets Manager, CloudWatch) arrive as the landing-zone `app_access_policy_arn` managed policy, attached to the same role via `Platform.spec.identity.extraPolicyArns`. One Platform, one privilege domain.
 
 ## Render locally
 

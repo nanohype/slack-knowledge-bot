@@ -59,7 +59,7 @@ npm test -- tests/acl-guard # Single file
 1. Emit audit event via emitAuditEvent()
 2. Poll SQS for message receipt (within 5s)
 3. Let the KEDA-scaled audit-consumer Deployment drain the queue (KEDA scales it
-   up on queue depth); observe it via `kubectl -n tenants-protohype logs
+   up on queue depth); observe it via `kubectl -n tenants-slack-knowledge-bot logs
    deploy/slack-knowledge-bot-audit-consumer` and a draining queue depth
 4. Assert: DDB audit table contains the event
 5. Assert: S3 audit bucket contains the event JSON

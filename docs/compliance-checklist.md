@@ -12,7 +12,7 @@
 |---------|---------------|----------|
 | CC6.1 — Access provisioning | WorkOS Directory Sync + SCIM; per-user OAuth required before any data access | WorkOS audit log; the OAuth flow |
 | CC6.2 — Access removal | OAuth tokens have 2-year DDB TTL; user offboarding via WorkOS Directory Sync (suspend → token refresh fails → access denied) | Directory Sync provisioner; DDB TTL |
-| CC6.3 — Least-privilege access | Pod IAM role: GetItem/PutItem only (no Scan); Bedrock: specific model ARNs only | IRSA policy on the landing-zone `slack-knowledge-bot-platform` role |
+| CC6.3 — Least-privilege access | Pod IAM role: GetItem/PutItem only (no Scan); Bedrock: specific model IDs only | The `<env>-slack-knowledge-bot-tenant` role — landing-zone app-access policy + the operator's `bedrock-model-scoping` clamp |
 | CC6.6 — Data transmission security | All external calls HTTPS; Redis TLS enforced; VPC private subnets; default-deny NetworkPolicy + egress allow-list | TLS enforced in code; `networkpolicy.yaml` |
 | CC6.7 — Data encryption at rest | DDB encrypted (AWS-managed KMS); S3 encrypted; token KMS envelope encryption | landing-zone `slack-knowledge-bot-platform` substrate |
 | CC6.8 — Malware/vulnerability controls | Image scan (trivy) + dependency scanning in CI | `security.yml`; `npm audit` in CI |
@@ -51,7 +51,7 @@
 | Art. 17 — Right to erasure | `deleteTokens(userId)` API in token store; audit log can be expunged by userId partition delete | `token-store.ts` deleteTokens |
 | Art. 25 — Privacy by design | ACL enforcement by design; PII scrubbing by default; no content stored permanently | Architecture |
 | Art. 30 — Records of processing | This document serves as processing record | This document |
-| Art. 32 — Security of processing | KMS encryption; TLS in transit; VPC isolation; NetworkPolicy; IRSA least-privilege | chart + landing-zone substrate |
+| Art. 32 — Security of processing | KMS encryption; TLS in transit; VPC isolation; NetworkPolicy; least-privilege pod IAM role | chart + landing-zone substrate |
 | Art. 33 — Breach notification | ops-incident runbook includes 72-hour breach notification SLA | Runbook |
 
 ### GDPR Data Inventory

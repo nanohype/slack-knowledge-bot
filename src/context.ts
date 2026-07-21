@@ -7,10 +7,9 @@
  * adds an outer `slack.query` span so every log line in the query pipeline
  * carries the same trace_id without an AsyncLocalStorage shim.
  *
- * The legacy `requestContext.run({traceId}, fn)` shape is preserved so
- * call-sites don't change — the `traceId` argument is ignored (OTel owns
- * trace IDs); callers that still want a local UUID for user-facing error
- * messages can keep their own variable.
+ * `run(ctx, fn)` takes a context whose `traceId` is unused — OTel owns trace
+ * IDs. Callers that want a local UUID for user-facing error messages keep
+ * their own variable.
  */
 import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 
@@ -21,7 +20,7 @@ export interface RequestContext {
 }
 
 export const requestContext = {
-  run<T>(_legacyCtx: RequestContext, fn: () => Promise<T>): Promise<T> {
+  run<T>(_ctx: RequestContext, fn: () => Promise<T>): Promise<T> {
     return tracer.startActiveSpan("slack.query", async (span: Span) => {
       try {
         const result = await fn();

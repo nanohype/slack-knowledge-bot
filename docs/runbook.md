@@ -15,7 +15,7 @@
 | AWS account | NanoCorp Production |
 | AWS region | us-west-2 |
 | Deploy model | Platform tenant on the `eks-agent-platform` operator; ArgoCD reconciles `chart/` from git |
-| EKS namespace | `tenants-protohype` |
+| EKS namespace | `tenants-slack-knowledge-bot` |
 | Workloads | main `Deployment` (Bolt + HTTP server) + KEDA-scaled audit-consumer `Deployment` |
 | Container image | GHCR (`ghcr.io/nanohype/slack-knowledge-bot:<tag>`) |
 
@@ -33,12 +33,12 @@ Slack → EKS pod (slack-knowledge-bot) → Aurora pgvector (search)
                               → Notion/Confluence/Drive APIs (connectors)
 ```
 
-The app runs as two Deployments in namespace `tenants-protohype`: the main pod
+The app runs as two Deployments in namespace `tenants-slack-knowledge-bot`: the main pod
 (Bolt Socket Mode + the `node:http` server on :3001 serving `/health` and
 `/oauth/:provider/{start,callback}`) and the audit-consumer (`node
 dist/bin/audit-consumer.js`, KEDA-scaled 0..5 on SQS queue depth). Both share
-one ServiceAccount (`slack-knowledge-bot`) bound to the landing-zone
-`slack-knowledge-bot-platform` IAM role by an EKS Pod Identity association —
+one ServiceAccount (`slack-knowledge-bot`) bound to the
+`<env>-slack-knowledge-bot-tenant` IAM role by an EKS Pod Identity association —
 pods get those credentials on every AWS call, no annotation.
 
 ---
@@ -46,7 +46,7 @@ pods get those credentials on every AWS call, no annotation.
 ## 3. Deployment
 
 There is no in-repo IaC and no manual rollout. The app ships as a Platform
-tenant of the `protohype` team on the `eks-agent-platform` operator, and ArgoCD
+tenant of the `workplace` team on the `eks-agent-platform` operator, and ArgoCD
 reconciles the Helm chart under `chart/` from git. CI builds + tests + scans the
 image and publishes it to GHCR; ArgoCD picks up new tags and rolls the
 Deployment. Operators touch git and `kubectl`, not the cluster's pods directly.
@@ -57,10 +57,11 @@ The infrastructure splits across three layers:
   (OpenTofu/Terragrunt) provisions DynamoDB ×3 (tokens, audit, identity-cache),
   SQS + DLQ, the S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache
   Redis, the KMS token key, and seeds `slack-knowledge-bot/<env>/app-secrets`.
-- **Platform CR** — `platform.yaml` declares slack-knowledge-bot as a tenant; the
-  operator reconciles the namespace, ResourceQuota, LimitRange, default-deny
-  NetworkPolicy, ArgoCD AppProject, the IAM role, KMS grants, and the S3 bucket
-  policy.
+- **Platform CR** — `platform.yaml` declares slack-knowledge-bot as a tenant of
+  the `workplace` team; the operator provisions the
+  `tenants-slack-knowledge-bot` namespace, ResourceQuota, LimitRange,
+  default-deny NetworkPolicy, the ArgoCD AppProject, and the
+  `<env>-slack-knowledge-bot-tenant` IAM role.
 - **Chart** — `chart/` renders the two Deployments, Service, Ingress
   (ingress-nginx + cert-manager TLS), ExternalSecret, NetworkPolicy, the
   audit-consumer ScaledObject, PrometheusRule, and the Grafana dashboard.
@@ -71,8 +72,8 @@ The infrastructure splits across three layers:
 # 1. Substrate — apply the landing-zone slack-knowledge-bot-platform component
 #    (DDB ×3, SQS + DLQ, S3 audit bucket, Aurora pgvector, ElastiCache Redis,
 #    the KMS token key, and the seeded slack-knowledge-bot/<env>/app-secrets).
-#    The IAM role is bound to the ServiceAccount by the Pod Identity
-#    association landing-zone creates.
+#    The <env>-slack-knowledge-bot-tenant role is bound to the ServiceAccount
+#    by the Pod Identity association landing-zone creates.
 
 # 2. Seed the app-level secrets. Full operator guide (JSON shape, CLI commands,
 #    where each value comes from, rotation) lives at docs/secrets.md. ESO syncs
@@ -84,7 +85,8 @@ The infrastructure splits across three layers:
 
 # 3. Platform CR — apply once during initial setup, then wait for Ready.
 kubectl apply -f platform.yaml
-kubectl wait --for=condition=Ready platform/slack-knowledge-bot --timeout=300s
+kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
+  -n tenants-workplace --timeout=300s
 
 # 4. GitOps — register gitops/applicationset-entry.yaml into nanohype/eks-gitops
 #    (applicationsets/apps-tenants.yaml). ArgoCD renders the chart per cluster/env
@@ -93,7 +95,7 @@ kubectl wait --for=condition=Ready platform/slack-knowledge-bot --timeout=300s
 #    audit-consumer Deployment.
 
 # 5. Confirm the rollout (APP_BASE_URL is the cert-manager ingress hostname).
-kubectl -n tenants-protohype rollout status deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout status deploy/slack-knowledge-bot
 curl -fsS "https://$APP_BASE_URL/health"
 ```
 
@@ -113,23 +115,26 @@ Watch a sync land:
 argocd app get slack-knowledge-bot-<env>
 
 # Or straight from the cluster
-kubectl -n tenants-protohype rollout status deploy/slack-knowledge-bot
-kubectl -n tenants-protohype get pods -l app.kubernetes.io/name=slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout status deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get pods -l app.kubernetes.io/name=slack-knowledge-bot
 ```
 
 ### 3.3 CI
 
-CI lives at the repo root: `.github/workflows/slack-knowledge-bot-ci.yml`. Triggers on push to `main` and on PRs touching `slack-knowledge-bot/**` or the workflow file. Steps (every gate must exit zero):
+CI lives at `.github/workflows/ci.yml`. Triggers on push to `main` and on PRs targeting `main`. Steps (every gate must exit zero):
 
 1. `actions/checkout@v4`
 2. `actions/setup-node@v4`, node-version `24`, npm cache
 3. `npm install --prefer-offline --no-audit --no-fund` (not `npm ci` — macOS-generated lockfile omits Linux platform-conditional binaries)
-4. install + build `packages/oauth`
-5. `npm run lint`
-6. `npm run typecheck`
-7. `npm run test`
-8. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
-9. `npm run chart:lint` + `npm run chart:template:staging` (Helm chart renders cleanly)
+4. `packages/oauth`: install + lint + typecheck + test + build
+5. `npm run audit:prod` (production deps, high severity)
+6. `npm run typecheck`, `npm run lint`, `npm run format:check`
+7. `npm run test:coverage` (threshold-enforced)
+8. The grep-enforced invariants: SDK-mock ban, bare-fetch ban, Slack WebClient construction
+9. `node scripts/sync-vendored.mjs --check` against a fresh nanohype checkout (vendored copies must be byte-identical)
+10. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
+11. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
+12. `docker build` (no push)
 
 CI carries no cluster or AWS credentials. The release workflow builds the image, scans it, and publishes to GHCR; ArgoCD does the rollout.
 
@@ -169,18 +174,18 @@ plain values and pulls secrets from the ESO-synced k8s Secret (`app-secrets` +
 
 ```bash
 # Pod + Deployment health
-kubectl -n tenants-protohype get deploy,pods -l app.kubernetes.io/name=slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get deploy,pods -l app.kubernetes.io/name=slack-knowledge-bot
 
 # Application health endpoint (port-forward the main pod's :3001)
-kubectl -n tenants-protohype port-forward deploy/slack-knowledge-bot 3001:3001 &
+kubectl -n tenants-slack-knowledge-bot port-forward deploy/slack-knowledge-bot 3001:3001 &
 curl -fsS http://localhost:3001/health
 
 # Audit-consumer health (also exposes /healthz, /readyz on its PORT, default 3001)
-kubectl -n tenants-protohype get deploy/slack-knowledge-bot-audit-consumer
-kubectl -n tenants-protohype logs deploy/slack-knowledge-bot-audit-consumer --tail=50
+kubectl -n tenants-slack-knowledge-bot get deploy/slack-knowledge-bot-audit-consumer
+kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot-audit-consumer --tail=50
 
 # Firing PrometheusRule alerts (query Grafana Cloud Mimir / Alertmanager)
-#   ALERTS{namespace="tenants-protohype", alertstate="firing"}
+#   ALERTS{namespace="tenants-slack-knowledge-bot", alertstate="firing"}
 ```
 
 ---
@@ -220,7 +225,7 @@ stamps the active-span IDs on every line). Jump from a trace in Tempo → the lo
 stream for that `trace_id` with one click.
 
 Break-glass: if Grafana is showing silence, check the pod is actually logging
-(`kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --tail=50`) before
+(`kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot --tail=50`) before
 suspecting the cluster forwarder.
 
 ### 6.3 PrometheusRule alerts
@@ -238,7 +243,7 @@ email at the Alertmanager receiver.
 
 ```bash
 # Currently firing for this tenant (run against Grafana Cloud Mimir / Alertmanager)
-#   ALERTS{namespace="tenants-protohype", alertstate="firing"}
+#   ALERTS{namespace="tenants-slack-knowledge-bot", alertstate="firing"}
 # Routing/receivers live in the cluster Alertmanager config (eks-gitops), not this chart.
 ```
 
@@ -280,16 +285,16 @@ aws sqs receive-message \
   --max-number-of-messages 10
 
 # 3. Check audit-consumer Deployment errors
-kubectl -n tenants-protohype logs deploy/slack-knowledge-bot-audit-consumer \
+kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot-audit-consumer \
   --since=1h | grep -i error
 #    KEDA scales this Deployment 0..5 on the audit queue depth; if the main
 #    queue is also backing up, confirm the consumer scaled up at all:
-kubectl -n tenants-protohype get scaledobject,hpa -l app.kubernetes.io/name=slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get scaledobject,hpa -l app.kubernetes.io/name=slack-knowledge-bot
 
 # 4. Common causes and fixes:
 #    - DDB write throttle: Check DDB consumed capacity, scale if needed
 #    - S3 write error: Check S3 bucket ACL/policy
-#    - Consumer not scaling: check the KEDA aws-sqs-queue trigger + the pod IRSA
+#    - Consumer not scaling: check the KEDA aws-sqs-queue trigger + the pod IAM role
 
 # 5. Replay DLQ messages (after fixing root cause)
 aws sqs change-message-visibility-batch \
@@ -354,19 +359,19 @@ aws sqs change-message-visibility-batch \
 
 ```bash
 # Why are the pods unhealthy? (events + crash reasons)
-kubectl -n tenants-protohype describe deploy/slack-knowledge-bot
-kubectl -n tenants-protohype get pods -l app.kubernetes.io/name=slack-knowledge-bot
-kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --previous --tail=100
+kubectl -n tenants-slack-knowledge-bot describe deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get pods -l app.kubernetes.io/name=slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot --previous --tail=100
 
 # Common causes: ESO hasn't synced the Secret (bad/missing key → Zod exits 1),
-# IRSA AssumeRole denied, or the image tag doesn't exist in GHCR.
-kubectl -n tenants-protohype get externalsecret slack-knowledge-bot
+# the Pod Identity association is missing, or the image tag doesn't exist in GHCR.
+kubectl -n tenants-slack-knowledge-bot get externalsecret slack-knowledge-bot
 
 # Restart the rollout (re-pulls the current tag, re-resolves the Secret)
-kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout restart deploy/slack-knowledge-bot
 
 # Roll back to the last-known-good ReplicaSet
-kubectl -n tenants-protohype rollout undo deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout undo deploy/slack-knowledge-bot
 # Or, for a durable rollback, pin the previous image tag in git and let ArgoCD
 # reconcile (argocd app rollback slack-knowledge-bot-<env> works too).
 ```
@@ -384,7 +389,7 @@ aws elasticache describe-replication-groups \
 
 # If the cluster is down, the pods log warnings but keep serving.
 # Rate limiting is not enforced until Redis recovers.
-kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --tail=50 | grep -i redis
+kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot --tail=50 | grep -i redis
 
 # For planned Redis maintenance: rate limiting is temporarily suspended
 # Monitor for abnormal query volumes during Redis downtime
@@ -400,7 +405,7 @@ kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --tail=50 | grep -i
 
 # Force immediate re-crawl (e.g., after bulk doc updates)
 # Send a message to the crawl trigger queue or restart the main Deployment
-kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout restart deploy/slack-knowledge-bot
 
 # Check pgvector chunk count
 psql "$RETRIEVAL_BACKEND_URL" -c "SELECT count(*) FROM chunks"

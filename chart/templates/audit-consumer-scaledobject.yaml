@@ -1,11 +1,11 @@
 {{- if and .Values.auditConsumer.enabled .Values.auditConsumer.keda.enabled -}}
 # KEDA ScaledObject — drives replica count of the audit-consumer Deployment
-# off the SQS audit queue depth. Triggers fetch metrics via the pod's IRSA
+# off the SQS audit queue depth. Triggers fetch metrics via the pod's IAM
 # role (podIdentity: aws), so no separate credentials secret is needed.
 #
 # Required IAM permission for the IAM role: sqs:GetQueueAttributes on the
-# audit queue ARN. The Platform CR's slack-knowledge-bot-sqs-consumer policy includes
-# this alongside ReceiveMessage / DeleteMessage / SendMessage.
+# audit queue ARN. The landing-zone app-access policy includes this alongside
+# ReceiveMessage / DeleteMessage / SendMessage.
 #
 # Set `keda.enabled: false` to disable KEDA scaling and manage replicas
 # manually via the Deployment spec.

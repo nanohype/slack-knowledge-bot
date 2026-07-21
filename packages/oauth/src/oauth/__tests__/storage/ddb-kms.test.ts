@@ -167,12 +167,12 @@ describe("DDBKmsTokenStorage (envelope encryption)", () => {
     );
   });
 
-  it("rejects when stored blob isn't a v1 envelope frame (old direct-KMS ciphertexts)", async () => {
+  it("rejects blobs without a v1 envelope frame (corrupt or foreign ciphertext)", async () => {
     ddbMock.on(GetItemCommand).resolves({
       Item: {
         userId: { S: "u" },
         provider: { S: "notion" },
-        // Legacy direct-KMS blob (random bytes, no version prefix).
+        // Random bytes with no version prefix.
         ciphertext: { B: Buffer.from([0xaa, 0xbb, 0xcc, 0xdd]) },
       },
     });

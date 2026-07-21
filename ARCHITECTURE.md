@@ -60,7 +60,7 @@ The generator handles empty context gracefully — if the retriever's breaker is
 - **Not its own cloud substrate.** It does not provision DynamoDB, Aurora, Redis, SQS, S3, or KMS. Those are landing-zone (see Boundaries). The chart consumes their outputs.
 - **Not a model host.** Bedrock runs Claude and Titan inference outside the cluster on-account. No self-hosted models.
 - **Not a cluster bootstrap.** The EKS cluster, ArgoCD, and the cluster addons it depends on (ESO, KEDA, ingress-nginx, cert-manager, the observability stack) must already exist (eks-gitops).
-- **Not the tenant operator.** It declares a `Platform` CR; the `eks-agent-platform` operator reconciles the namespace, IRSA, and AppProject.
+- **Not the tenant operator.** It declares a `Platform` CR; the `eks-agent-platform` operator provisions the workload namespace, the tenant IAM role, and the AppProject.
 - **Not an indexer.** This repo answers over an existing index; document ingestion/embedding into the retrieval backend is a separate concern.
 
 ## Boundaries
