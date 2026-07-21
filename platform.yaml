@@ -2,13 +2,16 @@
 # eks-agent-platform operator. Apply once per cluster before the
 # ApplicationSet entry starts reconciling the chart.
 #
-# Both CRs live in `tenants-workplace`, the workplace team's CR-home namespace.
-# That is distinct from the workload namespace the operator provisions
-# (`tenants-slack-knowledge-bot`, derived from Platform.metadata.name).
-#
-# Two CRs declared here:
+# Three CRs declared here:
+#   - Tenant       (cluster-scoped; the workplace team the Platform belongs to)
 #   - BudgetPolicy (referenced by Platform.spec.budget — required)
 #   - Platform     (the actual tenant declaration)
+#
+# The Tenant and BudgetPolicy/Platform CRs live in different scopes: Tenant is
+# cluster-scoped, the other two are namespaced into `tenants-workplace` — the
+# workplace team's control-plane namespace, which holds the CRs and nothing
+# else. That is distinct from the workload namespace the operator provisions
+# (`tenants-slack-knowledge-bot`, derived from Platform.metadata.name).
 #
 # What the operator reconciles from the Platform CR:
 #   - Namespace `tenants-slack-knowledge-bot` (Pod Security Standards baseline)
@@ -38,6 +41,27 @@
 # component's per-env entry applies, the outputs are wired into the chart's
 # per-env values (`tenantInfra.*`).
 
+---
+# The workplace team — internal employee-facing tooling: the Slack surfaces
+# people ask questions through and the knowledge sources behind them (Notion,
+# Confluence, Google Drive). `support` is the persona new Platforms onboarded
+# here inherit, matching how the team is measured: answer quality and time to
+# answer, not throughput.
+apiVersion: platform.nanohype.dev/v1alpha1
+kind: Tenant
+metadata:
+  name: workplace
+  labels:
+    agents.nanohype.dev/tenant: workplace
+spec:
+  displayName: Workplace
+  primaryPersona: support
+  # Soft ceiling on the sum of every owned Platform's BudgetPolicy.monthlyUsd.
+  # slack-knowledge-bot is the only Platform under this Tenant today.
+  aggregateMonthlyBudgetUsd: '5000'
+  compliance:
+    soc2: true
+    hipaa: false
 ---
 apiVersion: governance.nanohype.dev/v1alpha1
 kind: BudgetPolicy

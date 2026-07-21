@@ -195,8 +195,8 @@ kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot-audit-con
 SlackKnowledgeBot's observability is cluster-level — no per-pod sidecars. The app
 writes structured JSON to stderr → the cluster log forwarder → **Grafana Cloud
 Loki**. OTLP traces + metrics export to
-`otel-collector.observability.svc.cluster.local:4318` → the cluster OTel
-Collector → **Grafana Cloud Tempo** (traces) + **Mimir** (metrics). Alerting is
+`alloy.monitoring.svc.cluster.local:4318` → the cluster's **Grafana Alloy**
+receiver → **Grafana Cloud Tempo** (traces) + **Mimir** (metrics). Alerting is
 the chart's `prometheusrule.yaml` (four alerts), evaluated against Mimir and
 routed by the cluster's Alertmanager to PagerDuty / Slack / email.
 

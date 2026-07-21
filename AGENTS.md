@@ -30,9 +30,19 @@ Shipping this on a cluster means three artifacts travel together: the **Platform
 
 ### The Platform CR (`platform.yaml`)
 
-Two CRs in different groups — a `BudgetPolicy` (`governance.nanohype.dev/v1alpha1`) and the `Platform` (`platform.nanohype.dev/v1alpha1`) that references it:
+Three CRs — a cluster-scoped `Tenant` (`platform.nanohype.dev/v1alpha1`) for the owning team, a `BudgetPolicy` (`governance.nanohype.dev/v1alpha1`), and the `Platform` (`platform.nanohype.dev/v1alpha1`) that references both:
 
 ```yaml
+apiVersion: platform.nanohype.dev/v1alpha1
+kind: Tenant
+metadata:
+  name: workplace
+spec:
+  displayName: Workplace
+  primaryPersona: support
+  aggregateMonthlyBudgetUsd: '5000'
+  compliance: { soc2: true, hipaa: false }
+---
 apiVersion: governance.nanohype.dev/v1alpha1
 kind: BudgetPolicy
 metadata:
@@ -63,7 +73,7 @@ spec:
   isolation: namespace
 ```
 
-Both CRs live in `tenants-workplace`, the workplace team's CR-home namespace. The operator derives everything else from `Platform.metadata.name`: it provisions the workload namespace `tenants-slack-knowledge-bot`, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the `slack-knowledge-bot` ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. App pods and AgentFleet pods share that one role — the chart's SA binds to it through the Pod Identity association landing-zone creates, and the app's substrate grants reach it as an `extraPolicyArns` entry filled per environment at apply time.
+The `Tenant` is cluster-scoped — it is the workplace team as an organizational boundary, and `Platform.spec.tenant` references it by name. The `BudgetPolicy` and `Platform` live in `tenants-workplace`, the workplace team's CR-home namespace. The operator derives everything else from `Platform.metadata.name`: it provisions the workload namespace `tenants-slack-knowledge-bot`, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the `slack-knowledge-bot` ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. App pods and AgentFleet pods share that one role — the chart's SA binds to it through the Pod Identity association landing-zone creates, and the app's substrate grants reach it as an `extraPolicyArns` entry filled per environment at apply time.
 
 ### The Helm chart (`chart/`)
 
