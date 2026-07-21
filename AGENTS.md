@@ -37,7 +37,7 @@ apiVersion: governance.nanohype.dev/v1alpha1
 kind: BudgetPolicy
 metadata:
   name: slack-knowledge-bot
-  namespace: tenants-protohype
+  namespace: tenants-workplace
 spec:
   platformRef: { name: slack-knowledge-bot }
   monthlyUsd: '5000' # kill-switch fires at 120% (USD 6000)
@@ -48,20 +48,22 @@ apiVersion: platform.nanohype.dev/v1alpha1
 kind: Platform
 metadata:
   name: slack-knowledge-bot
-  namespace: tenants-protohype
+  namespace: tenants-workplace
 spec:
   displayName: slack-knowledge-bot
   persona: support
-  tenant: protohype
+  tenant: workplace
   budget: { name: slack-knowledge-bot }
   identity:
-    allowedModelFamilies: [anthropic, amazon] # Claude (LLM) + Titan (embeddings)
-    extraPolicyArns: [] # app pods assume the landing-zone role directly
+    allowedModels: # Claude Sonnet 4.6 (answers) + Titan (query embeddings)
+      - us.anthropic.claude-sonnet-4-6
+      - amazon.titan-embed-text-v2:0
+    extraPolicyArns: [] # filled per env with the landing-zone app-access policy
   compliance: { soc2: true }
   isolation: namespace
 ```
 
-The operator reconciles the namespace `tenants-protohype`, ResourceQuota, LimitRange, default-deny NetworkPolicy, ArgoCD AppProject, and a per-Platform IAM role trusting the `tenant-runtime` SA. **slack-knowledge-bot's own app pods don't use that operator role** — they assume the landing-zone `slack-knowledge-bot-platform` IRSA role directly via the EKS Pod Identity association. `extraPolicyArns` stays empty for that reason.
+Both CRs live in `tenants-workplace`, the workplace team's CR-home namespace. The operator derives everything else from `Platform.metadata.name`: it provisions the workload namespace `tenants-slack-knowledge-bot`, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the `slack-knowledge-bot` ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. App pods and AgentFleet pods share that one role — the chart's SA binds to it through the Pod Identity association landing-zone creates, and the app's substrate grants reach it as an `extraPolicyArns` entry filled per environment at apply time.
 
 ### The Helm chart (`chart/`)
 
@@ -72,14 +74,14 @@ The application Deployment plus everything that supports it. Templates under `ch
 | `deployment.yaml`                                                     | The main pod (Bolt + HTTP server on :3001)                                                                                            |
 | `service.yaml`                                                        | ClusterIP :3001                                                                                                                       |
 | `ingress.yaml`                                                        | ingress-nginx + cert-manager TLS for `/health` and `/oauth/:provider/{start,callback}`                                                |
-| `serviceaccount.yaml`                                                 | Shared SA for the main pod + audit-consumer, name pinned to the app; bound to the landing-zone IAM role by a Pod Identity association |
+| `serviceaccount.yaml`                                                 | Shared SA for the main pod + audit-consumer, name pinned to the app; bound to the `<env>-slack-knowledge-bot-tenant` IAM role by a Pod Identity association |
 | `externalsecret.yaml`                                                 | ESO syncs `slack-knowledge-bot/<env>/app-secrets` + `slack-knowledge-bot/<env>/db-credentials` from Secrets Manager                   |
 | `networkpolicy.yaml`                                                  | Default-deny + egress allow-list (AWS APIs, Slack/WorkOS/Notion/Confluence/Drive HTTPS, RDS + Redis on the VPC CIDR)                  |
 | `audit-consumer-deployment.yaml` + `audit-consumer-scaledobject.yaml` | The SQS-drain Deployment (`dist/bin/audit-consumer.js`), KEDA-scaled 0..5 on audit queue depth                                        |
 | `prometheusrule.yaml`                                                 | Four alerts — QueryP95, LLMError, AuditTotalLoss, AuditDlqDepth                                                                       |
 | `grafana-dashboard.yaml`                                              | ConfigMap loading `chart/dashboards/slack-knowledge-bot.json`                                                                         |
 
-`values.yaml` is the base; `values-staging.yaml` / `values-production.yaml` carry the per-env deltas (image tag, replica count). The image is `ghcr.io/nanohype/slack-knowledge-bot`. OTel attrs `agents.tenant=protohype` + `agents.platform=slack-knowledge-bot` are set in every values file (required by the platform-tenant contract).
+`values.yaml` is the base; `values-staging.yaml` / `values-production.yaml` carry the per-env deltas (image tag, replica count). The image is `ghcr.io/nanohype/slack-knowledge-bot`. OTel attrs `agents.tenant=workplace` + `agents.platform=slack-knowledge-bot` are set in every values file (required by the platform-tenant contract).
 
 ### Required tenant files
 
@@ -131,4 +133,4 @@ OAuth providers live in the in-repo `packages/oauth` package (the `slack-knowled
 - [`docs/`](docs/) — PRD, RAG architecture, QA playbook, threat model, compliance checklist, runbook, integrations, secrets, onboarding, test plan
 - [Platform Reference](../nanohype/docs/platform-reference.md) — the stack-wide view
 - [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) — the operator that reconciles the Platform CR
-- [`landing-zone`](https://github.com/nanohype/landing-zone) — the `slack-knowledge-bot-platform` substrate the chart's IAM role and data stores live in
+- [`landing-zone`](https://github.com/nanohype/landing-zone) — the `slack-knowledge-bot-platform` substrate: the data stores, the app-access policy, and the Pod Identity association that binds the chart's ServiceAccount to the tenant role

@@ -6,7 +6,7 @@
  * Run inside a running pod (the only thing with network access to the
  * private-subnet Aurora) via:
  *
- *   kubectl -n tenants-protohype exec -it deploy/slack-knowledge-bot -- \
+ *   kubectl -n tenants-slack-knowledge-bot exec -it deploy/slack-knowledge-bot -- \
  *     node dist/scripts/seed-demo.js
  *
  * Re-running is safe (ON CONFLICT ... DO UPDATE). This is a demo
@@ -94,7 +94,7 @@ const SEED_DOCS: SeedDoc[] = [
     sourceUrl: `https://docs.google.com/document/d/${DRIVE_FILE_ID}/edit`,
     title: "Q2 2026 Engineering Roadmap",
     chunkText:
-      "Q2 2026 priorities for Engineering: (1) Ship the knowledge bot to general availability by end of May, with SOC 2 Type II audit fieldwork completed in parallel. (2) Migrate the legacy audit logging system to the new structured event format before June 1st to meet compliance deadlines. (3) Reduce API p95 latency from 3.2 seconds to under 2 seconds through caching, query planning improvements, and a move from t4g.micro to t4g.small database instances. (4) Launch the billing revamp behind a feature flag for 10% of tenants by end of quarter.",
+      "Q2 2026 priorities for Engineering: (1) Ship the knowledge bot to general availability by end of May, with SOC 2 Type II audit fieldwork completed in parallel. (2) Move the analytics warehouse onto the columnar store before June 1st so the finance close runs same-day. (3) Reduce API p95 latency from 3.2 seconds to under 2 seconds through caching, query planning improvements, and a move from t4g.micro to t4g.small database instances. (4) Launch the billing revamp behind a feature flag for 10% of tenants by end of quarter.",
     lastModified: "2026-04-16T00:00:00Z",
   },
 ];

@@ -79,9 +79,9 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **What it does** | Two calls per query: (1) embed the user's question via Titan for k-NN search, (2) generate the grounded answer via Claude Sonnet 4.6 with the verified-accessible documents as context. |
 | **Port** | `BedrockRuntimeClient` (AWS SDK v3). Factories accept the client directly — no custom port type because the SDK is already a typed client. |
 | **Factory** | `createRetriever({openSearch, bedrock, embeddingModelId})` (`src/rag/retriever.ts`), `createGenerator({bedrock, llmModelId, staleThresholdDays, …})` (`src/rag/generator.ts`) |
-| **Auth** | IRSA — pods AssumeRoleWithWebIdentity into the landing-zone `slack-knowledge-bot-platform` role, which grants `bedrock:InvokeModel` on the specific model ARNs (listed under the Platform CR's `spec.irsa.policies`). No API key. |
+| **Auth** | Pod Identity — the chart's ServiceAccount is bound to the `<env>-slack-knowledge-bot-tenant` role, whose `bedrock:InvokeModel` grant is clamped to the model IDs in the Platform CR's `spec.identity.allowedModels`. No API key. |
 | **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-4-6` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
-| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the landing-zone `slack-knowledge-bot-platform` component and the Platform CR's IRSA policies — there's no app-level IAM. |
+| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `slack-knowledge-bot-platform` component supplying the substrate grants — there's no app-level IAM. |
 | **Verify** | `npm test -- --grep "retriever\|generator"` (RRF fusion ranking + dedup, Bedrock failure paths, stale-citation marker, circuit-breaker trip → empty hits) |
 | **Security** | Inference is on-account, so source content never reaches a third party. Bedrock model-invocation logging is governed at the landing-zone account/region level (an org/substrate concern) — it is not toggled by app code, a request header, or anything in this chart. See `docs/threat-model.md`. |
 
@@ -122,7 +122,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 |---|---|
 | **What it does** | At-least-once delivery for audit events (query + revocation). Primary queue → DLQ on failure → `AuditTotalLoss` metric if both fail. The audit-consumer Deployment (`node dist/bin/audit-consumer.js`, KEDA-scaled 0..5 replicas on SQS queue depth) drains the queue into DDB (hot, 90d TTL) + S3 (archive, 1yr). |
 | **Port** | `SQSClient` (AWS SDK v3) via `createAuditLogger({sqs, queueUrl, dlqUrl, …})` |
-| **Auth** | IRSA — the pod's `slack-knowledge-bot-platform` role has `sqs:SendMessage` (producer) and `sqs:ReceiveMessage`/`DeleteMessage` (consumer) on the specific queue ARNs. |
+| **Auth** | Pod Identity — the pod's `<env>-slack-knowledge-bot-tenant` role has `sqs:SendMessage` (producer) and `sqs:ReceiveMessage`/`DeleteMessage` (consumer) on the specific queue ARNs, via the landing-zone app-access policy. |
 | **Env vars** | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` |
 | **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions the queues + DLQ; the chart runs the audit-consumer Deployment and its KEDA ScaledObject (`aws-sqs-queue` trigger). No manual setup. |
 | **Verify** | `npm test -- --grep audit-logger` (primary → DLQ → total-loss fallover) |
@@ -138,7 +138,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | Notion | `ConnectorVerifier` | Per-user OAuth | `NOTION_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Confluence | `ConnectorVerifier` | Per-user OAuth | `CONFLUENCE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Google Drive | `ConnectorVerifier` | Per-user OAuth | `GOOGLE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
-| Bedrock | `BedrockRuntimeClient` | IRSA | `BEDROCK_REGION`, `BEDROCK_LLM_MODEL_ID`, `BEDROCK_EMBEDDING_MODEL_ID` | Yes — pass a different LLM client |
+| Bedrock | `BedrockRuntimeClient` | Pod Identity | `BEDROCK_REGION`, `BEDROCK_LLM_MODEL_ID`, `BEDROCK_EMBEDDING_MODEL_ID` | Yes — pass a different LLM client |
 | Retrieval (pgvector) | `RetrievalBackend` | Aurora + ESO-synced creds | `RETRIEVAL_BACKEND_URL` or `PG*` fields | Yes — any implementation of the two-method port |
 | Redis | `RateLimiterRedisPort` | VPC + TLS | `REDIS_URL` | Yes — any sorted-set-shaped backend |
-| SQS | `SQSClient` | IRSA | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` | Yes — pass a different queue client |
+| SQS | `SQSClient` | Pod Identity | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` | Yes — pass a different queue client |

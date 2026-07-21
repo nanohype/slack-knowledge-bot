@@ -36,10 +36,10 @@ task ci   # build + lint + typecheck + test + format:check + helm lint/template 
 Ships as a [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) Platform tenant. The trio:
 
 - **`chart/`** — the application Helm chart: Deployment + Service + Ingress (ingress-nginx + cert-manager) + NetworkPolicy + ServiceAccount (Pod Identity) + ExternalSecret (ESO), plus the KEDA-scaled audit consumer, PrometheusRule alerts, and a Grafana dashboard. Per-env deltas in `chart/values-{staging,production}.yaml`.
-- **`platform.yaml`** — the `Platform` CR + `BudgetPolicy` declaring the tenant boundary (`tenant: protohype`, namespace `tenants-protohype`). The operator reconciles the Namespace, ResourceQuota, IAM role, KMS grants, S3 bucket policy, and ArgoCD AppProject.
+- **`platform.yaml`** — the `Platform` CR + `BudgetPolicy` declaring the tenant boundary (`tenant: workplace`, applied into the team's CR-home namespace `tenants-workplace`). The operator provisions the `tenants-slack-knowledge-bot` workload namespace, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role.
 - **`gitops/applicationset-entry.yaml`** — the ApplicationSet entry registered into [`nanohype/eks-gitops`](https://github.com/nanohype/eks-gitops) for ArgoCD reconciliation.
 
-The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). It binds the role to the chart's ServiceAccount via an EKS Pod Identity association. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
+The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, KMS token key, Secrets Manager seeding — is provisioned by the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone). It binds the chart's ServiceAccount to the `<env>-slack-knowledge-bot-tenant` role via an EKS Pod Identity association, and emits the app-access managed policy the Platform CR attaches through `spec.identity.extraPolicyArns`. Apply `platform.yaml` once, wait for `Ready`, then ArgoCD owns the rollout: bump `image.tag` in the per-env values, commit, push.
 
 ## Boundaries
 

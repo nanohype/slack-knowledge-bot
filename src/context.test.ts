@@ -18,10 +18,9 @@ describe("requestContext.run", () => {
     ).rejects.toThrow("boom");
   });
 
-  it("ignores the legacy traceId argument", async () => {
-    // `requestContext.run` accepts the legacy `{traceId}` shape so callers
-    // don't churn; the value is discarded because OTel owns trace IDs now.
-    const ok = await requestContext.run({ traceId: "legacy-ignored" }, async () => 42);
+  it("ignores the traceId argument", async () => {
+    // The context's `traceId` is discarded — OTel owns trace IDs.
+    const ok = await requestContext.run({ traceId: "ignored" }, async () => 42);
     expect(ok).toBe(42);
   });
 });

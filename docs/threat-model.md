@@ -184,9 +184,9 @@ Then: Query 21 (to either replica) is blocked
 ## 5. Security Findings & Remediations
 
 ### FINDING-01: IAM Policy Too Broad (HIGH)
-**Finding:** The landing-zone `slack-knowledge-bot-platform` IAM role grants table-level ReadWrite (Scan + full-table access) on the token store. The pod only needs GetItem/PutItem/DeleteItem.
+**Finding:** A table-level ReadWrite grant (Scan + full-table access) on the token store exceeds what the pod needs — GetItem/PutItem/DeleteItem.
 
-**Remediation:** Scope the DynamoDB statement on the IAM role in landing-zone to the least-privilege action set:
+**Remediation:** Scope the DynamoDB statement in the landing-zone app-access policy (attached to the `<env>-slack-knowledge-bot-tenant` role) to the least-privilege action set:
 ```json
 {
   "Effect": "Allow",

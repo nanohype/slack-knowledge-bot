@@ -66,7 +66,7 @@ aws secretsmanager put-secret-value \
 # 3. Let ESO resync and restart the pods to pick up the new values.
 #    ESO refreshes on its `refreshInterval`; the restart forces it
 #    immediately. (Secrets are read into the pod env at start.)
-kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout restart deploy/slack-knowledge-bot
 
 # 4. Scrub the file.
 shred -u /tmp/slack-knowledge-bot-staging-secrets.json 2>/dev/null || rm -P /tmp/slack-knowledge-bot-staging-secrets.json
@@ -89,7 +89,7 @@ aws secretsmanager put-secret-value \
   --secret-id slack-knowledge-bot/staging/app-secrets \
   --secret-string file:///tmp/slack-knowledge-bot-staging-secrets.json
 
-kubectl -n tenants-protohype rollout restart deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot rollout restart deploy/slack-knowledge-bot
 
 shred -u /tmp/slack-knowledge-bot-staging-secrets.json 2>/dev/null || rm -P /tmp/slack-knowledge-bot-staging-secrets.json
 ```
@@ -114,11 +114,11 @@ After seeding, confirm the pods can read each key (pods fail their startup/healt
 
 ```bash
 # ESO synced the secret and the pods are running
-kubectl -n tenants-protohype get externalsecret slack-knowledge-bot
-kubectl -n tenants-protohype get deploy/slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get externalsecret slack-knowledge-bot
+kubectl -n tenants-slack-knowledge-bot get deploy/slack-knowledge-bot
 
 # tail the pod log for config errors
-kubectl -n tenants-protohype logs deploy/slack-knowledge-bot --since=5m -f
+kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot --since=5m -f
 ```
 
 If you see `ZodError: required … missing`, one or more keys in the secret are absent or misnamed — check against the shape at the top of this doc.
