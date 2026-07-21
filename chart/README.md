@@ -17,7 +17,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
   - `networkpolicy.yaml` — default-deny + egress allow-list
   - `audit-consumer-deployment.yaml` — long-running SQS consumer (`dist/bin/audit-consumer.js`); drains the audit queue → DynamoDB + S3
   - `audit-consumer-scaledobject.yaml` — KEDA `aws-sqs-queue` trigger scaling the audit-consumer 0..5 replicas off the queue depth, using the pod's IAM identity for SQS metrics
-  - `prometheusrule.yaml` — four alerts (QueryP95, LLMError, AuditTotalLoss, AuditDlqDepth)
+  - `prometheusrule.yaml` — QueryP95, LLMError, AuditTotalLoss, plus AuditDlqDepth behind `auditDlq.cloudwatchExporterEnabled`. Rendered only when `prometheusRule.enabled` is true — off by default, since the default stack (Alloy → Amazon Managed Prometheus) runs no in-cluster Prometheus Operator to evaluate the rules
   - `grafana-dashboard.yaml` — GrafanaDashboard CR (instanceSelector `dashboards: external`) loading the dashboard from `dashboards/slack-knowledge-bot.json`, reconciled by the grafana-operator onto Amazon Managed Grafana
   - `_helpers.tpl` — name/label helpers
 
@@ -72,7 +72,7 @@ This chart owns the app's k8s surface. The cloud substrate and cluster addons si
 
 **This chart:** the main `Deployment`, the KEDA-scaled `audit-consumer-deployment.yaml` (`dist/bin/audit-consumer.js`, 0..5 replicas off SQS audit queue depth — consumer logic in `src/audit/audit-consumer.ts`, port-injected so unit tests fake the SDKs), the `ingress`, the default-deny `networkpolicy.yaml`, the `externalsecret.yaml`, plus observability that ships here rather than in eks-gitops:
 
-- `prometheusrule.yaml` — four alerts: AuditDlqDepth, QueryP95, LLMError, AuditTotalLoss. Alertmanager (eks-gitops) routes them to PagerDuty / Slack.
+- `prometheusrule.yaml` — QueryP95, LLMError, AuditTotalLoss, plus AuditDlqDepth behind `auditDlq.cloudwatchExporterEnabled`. Opt-in via `prometheusRule.enabled` for clusters running a Prometheus Operator; rule evaluation and alert routing are cluster-side concerns, not this chart's.
 - `grafana-dashboard.yaml` — a `GrafanaDashboard` CR loading the dashboard from `chart/dashboards/slack-knowledge-bot.json`; the grafana-operator reconciles it onto the external Amazon Managed Grafana.
 
 Bedrock invocation logging is disabled at the account/region level in landing-zone, not per-tenant.

@@ -155,7 +155,7 @@ Then: SlackKnowledgeBot responds based only on retrieved context (which would re
 
 ### RT-04: OAuth Token Not Exposed
 ```
-Given: Pod logs are shipped to Grafana Cloud Loki via the cluster log forwarder
+Given: Pod logs are shipped to the in-cluster Loki via the cluster log forwarder
 When: An authorized user queries the log store
 Then: No OAuth tokens (Bearer tokens, access_token values) appear in any log line
 ```

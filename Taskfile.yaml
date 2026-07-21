@@ -12,11 +12,12 @@ tasks:
   # === Composite ===
 
   ci:
-    desc: 'Full local CI: install, oauth package, check (typecheck+lint+format+test), audit, build, helm lint/template, docker build'
+    desc: 'Full local CI: install, oauth package, check (typecheck+lint+format+test+platform), audit, build, helm lint/template, docker build'
     cmds:
       - task: install
       - task: oauth
       - task: check
+      - task: platform:validate
       - task: audit
       - task: build
       - task: helm:lint
@@ -37,9 +38,21 @@ tasks:
   # === TypeScript ===
 
   check:
-    desc: 'App gate: typecheck + lint + format:check + test'
+    desc: 'App gate: typecheck + lint + format:check + test + platform:validate'
     cmds:
       - npm run check
+
+  # === Platform tenant contract ===
+
+  platform:validate:
+    desc: 'Validate platform.yaml against the vendored eks-agent-platform CRD schemas (+ gate self-test)'
+    cmds:
+      - npm run platform:validate
+
+  platform:sync-schemas:
+    desc: 'Re-vendor the CRD schemas from an eks-agent-platform checkout and re-pin provenance'
+    cmds:
+      - npm run sync:crd-schemas
 
   oauth:
     desc: 'slack-knowledge-bot-oauth package: lint + typecheck + test + build'

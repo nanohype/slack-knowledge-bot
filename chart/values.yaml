@@ -122,7 +122,7 @@ grafanaDashboard:
 auditDlq:
   cloudwatchExporterEnabled: false
 
-# Audit consumer — long-running SQS poller. Replaces the CDK-era Lambda.
+# Audit consumer — long-running SQS poller.
 # Drains tenantInfra.sqsAuditQueueUrl → DynamoDB (auditTable) + S3
 # (auditBucket). KEDA owns replica count off the queue depth.
 auditConsumer:

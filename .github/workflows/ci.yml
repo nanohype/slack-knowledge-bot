@@ -129,6 +129,21 @@ jobs:
           fi
           echo "Slack WebClient construction invariant holds"
 
+      - name: platform.yaml CRD-schema gate
+        # platform.yaml is applied by hand, once, and read by nothing else in
+        # this repo — so a typo'd field, a missing required key, or a
+        # spec.tenant naming a Tenant that was never declared would otherwise
+        # travel all the way to `kubectl apply`. This validates every document
+        # against the eks-agent-platform CRD schemas vendored under
+        # `schemas/crd/` (digests pinned in provenance.json, so a missing or
+        # altered schema aborts the run instead of passing vacuously), asserts
+        # cluster/namespaced scope, rejects unknown fields that controller-gen
+        # schemas would otherwise let through, and cross-checks the Tenant ↔
+        # Platform ↔ BudgetPolicy ↔ chart-values references. The second
+        # invocation is the gate's own self-test: it breaks the manifest in
+        # memory four ways and fails if any of them is NOT rejected.
+        run: npm run platform:validate
+
       # Every vendored surface (src/vendor/runtime modules, biome.base.json,
       # the tenant-chart-base chart, and the sync script itself) is a
       # byte-identical copy of its source of truth in nanohype/nanohype,
