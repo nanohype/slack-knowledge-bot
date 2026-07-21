@@ -6,9 +6,10 @@
  * the test runner). These cases just assert the public entry points don't
  * throw — exercising the histogram/counter caches without any runtime deps.
  *
- * The real pipeline is validated in the live environment via the ADOT
- * collector sidecar + Grafana Cloud Mimir; there is nothing useful to
- * assert here without spinning up an OTel SDK + exporter.
+ * The real pipeline is validated in the live environment: OTLP export to the
+ * cluster's Grafana Alloy receiver, remote-written into Amazon Managed
+ * Prometheus. There is nothing useful to assert here without spinning up an
+ * OTel SDK + exporter.
  */
 import { describe, expect, it } from "vitest";
 import { counter, flushMetrics, timing } from "./metrics.js";

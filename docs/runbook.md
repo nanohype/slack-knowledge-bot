@@ -131,10 +131,11 @@ CI lives at `.github/workflows/ci.yml`. Triggers on push to `main` and on PRs ta
 6. `npm run typecheck`, `npm run lint`, `npm run format:check`
 7. `npm run test:coverage` (threshold-enforced)
 8. The grep-enforced invariants: SDK-mock ban, bare-fetch ban, Slack WebClient construction
-9. `node scripts/sync-vendored.mjs --check` against a fresh nanohype checkout (vendored copies must be byte-identical)
-10. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
-11. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
-12. `docker build` (no push)
+9. `npm run platform:validate` — every document in `platform.yaml` validated against the eks-agent-platform CRD schemas vendored under `schemas/crd/` (structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references), followed by the gate's own self-test
+10. `node scripts/sync-vendored.mjs --check` against a fresh nanohype checkout (vendored copies must be byte-identical)
+11. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
+12. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
+13. `docker build` (no push)
 
 CI carries no cluster or AWS credentials. The release workflow builds the image, scans it, and publishes to GHCR; ArgoCD does the rollout.
 
@@ -184,7 +185,8 @@ curl -fsS http://localhost:3001/health
 kubectl -n tenants-slack-knowledge-bot get deploy/slack-knowledge-bot-audit-consumer
 kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot-audit-consumer --tail=50
 
-# Firing PrometheusRule alerts (query Grafana Cloud Mimir / Alertmanager)
+# Firing alerts (query Amazon Managed Prometheus via the ManagedPrometheus
+# data source in Amazon Managed Grafana)
 #   ALERTS{namespace="tenants-slack-knowledge-bot", alertstate="firing"}
 ```
 
@@ -192,31 +194,41 @@ kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot-audit-con
 
 ## 6. Monitoring & Alerts
 
-SlackKnowledgeBot's observability is cluster-level — no per-pod sidecars. The app
-writes structured JSON to stderr → the cluster log forwarder → **Grafana Cloud
-Loki**. OTLP traces + metrics export to
-`alloy.monitoring.svc.cluster.local:4318` → the cluster's **Grafana Alloy**
-receiver → **Grafana Cloud Tempo** (traces) + **Mimir** (metrics). Alerting is
-the chart's `prometheusrule.yaml` (four alerts), evaluated against Mimir and
-routed by the cluster's Alertmanager to PagerDuty / Slack / email.
+SlackKnowledgeBot's observability is cluster-level — no per-pod sidecars, and no
+third-party SaaS observability backend. Every backend is either in-cluster or
+AWS-managed, wired by [`eks-gitops`](https://github.com/nanohype/eks-gitops):
 
-### 6.1 App metrics → Grafana Cloud Mimir
+- The app writes structured JSON to stderr → the cluster log forwarder → the
+  in-cluster **Loki** (`loki-gateway.monitoring.svc.cluster.local`).
+- OTLP traces + metrics export to `alloy.monitoring.svc.cluster.local:4318` →
+  the cluster's **Grafana Alloy** receiver → the in-cluster **Tempo**
+  (`tempo.monitoring.svc.cluster.local:3200`) for traces, and
+  **Amazon Managed Service for Prometheus (AMP)** for metrics, which Alloy
+  reaches by SigV4-signed remote-write under its own Pod Identity association.
+- **Amazon Managed Grafana (AMG)** is the query surface. The grafana-operator
+  reconciles the `ManagedPrometheus`, `Loki`, `Tempo`, and `CloudWatch` data
+  sources onto it; app pods hold no observability-backend credentials.
 
-Latencies (histograms), counters, and the `circuit_open_total{source}` gauge
-live in Mimir. Query them in Grafana Cloud Explore or via the ops dashboard.
+### 6.1 App metrics → Amazon Managed Prometheus
+
+Latencies (histograms) and counters land in AMP. Query them through the
+`ManagedPrometheus` data source in AMG — Explore, or the ops dashboard below.
 
 | Metric | Where | Alert target |
 |--------|-------|-------------|
-| `query_latency` histogram | Mimir | p95 > 5s for 15min (`QueryP95` alert — see below) |
-| `llm_latency` histogram | Mimir | p95 > 25s |
-| `retrieval_latency` histogram | Mimir | p95 > 2s |
-| `embedding_latency` histogram | Mimir | p95 > 1s |
-| `llm_error_total` counter | Mimir | rate > 1/min (`LLMError` alert) |
-| `redaction_count` counter | Mimir | track per-source; sudden spike = source ACL regression |
-| `circuit_open_total{source}` counter | Mimir | any non-zero value pages on-call |
-| `rate_limit_hit_total{limit_type}` counter | Mimir | tracking, not alerting |
+| `query_latency` histogram | AMP | p95 > 5s for 15min (`QueryP95` alert — see below) |
+| `llm_latency` histogram | AMP | p95 > 25s |
+| `retrieval_latency` histogram | AMP | p95 > 2s |
+| `embedding_latency` histogram | AMP | p95 > 1s |
+| `llm_error_total` counter | AMP | rate > 1/min (`LLMError` alert) |
+| `redaction_count` counter | AMP | track per-source; sudden spike = source ACL regression |
+| `circuit_open_total{source}` counter | AMP | any non-zero value pages on-call |
+| `rate_limit_hit_total{limit_type}` counter | AMP | tracking, not alerting |
 
-### 6.2 Logs → Grafana Cloud Loki
+Series are namespace-qualified by `src/metrics.ts`, so the PromQL names carry
+the `slack_knowledge_bot_` prefix (e.g. `slack_knowledge_bot_query_latency_ms_bucket`).
+
+### 6.2 Logs → Loki
 
 The app writes JSON to stderr; the cluster log forwarder picks it up off the pod
 and ships it to Loki, tagged with the pod's `namespace`/`pod`/`container`
@@ -230,24 +242,31 @@ suspecting the cluster forwarder.
 
 ### 6.3 PrometheusRule alerts
 
-The chart's `prometheusrule.yaml` ships four alerts, evaluated against Mimir and
-routed by the cluster's Alertmanager. Subscribe PagerDuty, a Slack webhook, or an
-email at the Alertmanager receiver.
+The chart's `prometheusrule.yaml` declares the alerts below as a
+`monitoring.coreos.com/v1` `PrometheusRule`. **It is off by default**
+(`prometheusRule.enabled: false`): the standard stack here is Alloy →
+Amazon Managed Prometheus with no in-cluster Prometheus Operator to evaluate
+the rules, so the object would be inert. eks-gitops installs the
+prometheus-operator CRDs, so it applies cleanly wherever you do turn it on —
+set `prometheusRule.enabled: true` on a cluster that runs an operator, and
+match `prometheusRule.selector` to that operator's rule selector. On the
+default stack, alert on these same expressions with Grafana-managed alert
+rules in AMG instead.
 
 | Alert | Source | Threshold | Notes |
 |---|---|---|---|
-| `AuditDlqDepth` | SQS audit DLQ `ApproximateNumberOfMessagesVisible` | ≥ 1 | Compliance — see RB-01 |
-| `QueryP95` | `query_latency` p95 | > 5000ms for 3 × 5min | See RB-02 |
-| `LLMError` | `llm_error_total` rate | ≥ 5 in 5min | Bedrock failure rate |
-| `AuditTotalLoss` | `audit_total_loss_total` | ≥ 1 in 5min | Primary SQS + DLQ both failed — compliance-critical |
+| `SlackKnowledgeBotQueryP95LatencyBreach` | `query_latency` p95 | > 5000ms for 15min | See RB-02 |
+| `SlackKnowledgeBotLLMErrorRateSpike` | `llm_error_total` rate | ≥ 5 in 5min | Bedrock failure rate |
+| `SlackKnowledgeBotAuditTotalLoss` | `audit_total_loss_total` | ≥ 1 in 5min | Primary SQS + DLQ both failed — compliance-critical |
+| `SlackKnowledgeBotAuditDlqDepthHigh` | SQS audit DLQ `ApproximateNumberOfMessagesVisible` | ≥ 1 | Compliance — see RB-01. Opt-in: needs `auditDlq.cloudwatchExporterEnabled=true` **and** an exporter feeding `AWS/SQS` metrics into AMP |
 
 ```bash
-# Currently firing for this tenant (run against Grafana Cloud Mimir / Alertmanager)
+# Currently firing for this tenant (PromQL against AMP)
 #   ALERTS{namespace="tenants-slack-knowledge-bot", alertstate="firing"}
-# Routing/receivers live in the cluster Alertmanager config (eks-gitops), not this chart.
+# Routing/receivers live cluster-side in eks-gitops, not in this chart.
 ```
 
-### 6.4 Traces → Grafana Cloud Tempo
+### 6.4 Traces → Tempo
 
 OTel spans from `http`/`fetch`/`aws-sdk`/`pg`/`ioredis` are auto-instrumented
 via `NODE_OPTIONS="--require @opentelemetry/auto-instrumentations-node/register"`
@@ -257,11 +276,11 @@ to the full trace in Tempo in one click.
 
 ### 6.5 Dashboards
 
-The eight-panel ops dashboard ships with the chart as a ConfigMap
-(`grafana-dashboard.yaml`, labeled `grafana_dashboard: "1"`, loading
-`chart/dashboards/slack-knowledge-bot.json`) and is auto-discovered by the
-cluster Grafana sidecar. Find it in **Grafana Cloud → Dashboards →
-`slack-knowledge-bot`**, querying Mimir.
+The eight-panel ops dashboard ships with the chart as a `GrafanaDashboard` CR
+(`grafana-dashboard.yaml`, `instanceSelector: dashboards=external`, loading
+`chart/dashboards/slack-knowledge-bot.json`). The grafana-operator reconciles it
+onto Amazon Managed Grafana. Find it in **AMG → Dashboards →
+`slack-knowledge-bot`**, querying the `ManagedPrometheus` data source.
 
 ---
 
@@ -311,11 +330,11 @@ aws sqs change-message-visibility-batch \
 **Possible causes:** Bedrock throttling, pgvector slow queries, ACL check timeouts
 
 ```bash
-# 1. Find slow queries in Loki (query via Grafana Cloud → Explore → Loki):
+# 1. Find slow queries in Loki (query via AMG → Explore → Loki):
 #    {service="slack-knowledge-bot", environment="production"} |= "query processed" | json | latencyMs > 3000
 #    Then copy a `trace_id` and pivot to Tempo for the full span tree.
 
-# 2. Compare query_latency histogram in Mimir against baseline:
+# 2. Compare query_latency histogram in AMP against baseline:
 #    histogram_quantile(0.95, sum by (le) (rate(query_latency_bucket[5m])))
 #    vs. the same expression over 24h ago.
 
@@ -339,14 +358,14 @@ aws sqs change-message-visibility-batch \
 **Impact:** Possible conservative over-redaction (not under-redaction — fail-secure)
 
 ```bash
-# Recent ACL-probe non-auth errors (Grafana Cloud → Explore → Loki):
+# Recent ACL-probe non-auth errors (AMG → Explore → Loki):
 #   {service="slack-knowledge-bot"} |= "ACL probe non-auth error"
 # Redactions by source:
-#   sum by (source) (rate(redaction_count_total[5m]))    # in Mimir
+#   sum by (source) (rate(redaction_count_total[5m]))    # in AMP
 
 # Circuit-breaker trips (one trip = O(5) consecutive failures → fail-secure):
 #   {service="slack-knowledge-bot"} |= "ACL probe short-circuited"
-#   or: circuit_open_total{source="notion|confluence|drive"} in Mimir
+#   or: circuit_open_total{source="notion|confluence|drive"} in AMP
 
 # 401s typically mean user-specific token refresh — expected during
 # extended user absence. Check getValidToken warnings:
@@ -400,7 +419,7 @@ kubectl -n tenants-slack-knowledge-bot logs deploy/slack-knowledge-bot --tail=50
 ## 8. Connector Crawl Operations
 
 ```bash
-# Last crawl time for each source (Grafana Cloud → Explore → Loki):
+# Last crawl time for each source (AMG → Explore → Loki):
 #   {service="slack-knowledge-bot"} |= "crawl complete"
 
 # Force immediate re-crawl (e.g., after bulk doc updates)

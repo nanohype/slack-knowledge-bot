@@ -1,16 +1,15 @@
 {{- if .Values.prometheusRule.enabled -}}
-# PromQL ports of the four CloudWatch alarms that lived in the prior CDK
-# stack (QueryP95LatencyAlarm, LLMErrorAlarm, AuditTotalLossAlarm,
-# AuditDlqDepthAlarm). Metric names target OTel-exported metrics as they
-# arrive in Mimir — the app emits via `src/metrics.ts` (timing + counter
-# surface over @opentelemetry/api), the cluster-level OTel Collector ships
-# them to Mimir.
+# SLO alerts over the app's own OTel metrics. Series names are the
+# namespace-qualified instruments `src/metrics.ts` emits (timing + counter
+# over @opentelemetry/api); the cluster's Grafana Alloy receiver
+# remote-writes them into Amazon Managed Service for Prometheus, which is
+# what these expressions evaluate against.
 #
 # AuditDLQ depth comes from CloudWatch (AWS/SQS namespace) rather than the
-# app — requires a cloudwatch-exporter or aws-cloudwatch-agent feeding
-# `aws_sqs_approximate_number_of_messages_visible` into Mimir. The alert
-# rule is included; if your cluster doesn't export that metric yet, the
-# rule stays in a "pending data" state and never fires.
+# app, so it needs a cloudwatch-exporter or aws-cloudwatch-agent feeding
+# `aws_sqs_approximate_number_of_messages_visible` into AMP. That group is
+# behind `auditDlq.cloudwatchExporterEnabled` — leave it off until the
+# exporter exists, or the rule sits on missing data and never fires.
 
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -71,7 +70,7 @@ spec:
       rules:
         - alert: SlackKnowledgeBotAuditDlqDepthHigh
           # Requires cloudwatch-exporter or aws-cloudwatch-agent feeding
-          # AWS/SQS metrics into Mimir. Adjust the label selectors to match
+          # AWS/SQS metrics into AMP. Adjust the label selectors to match
           # your exporter's relabel config.
           expr: max by (queue_name) (aws_sqs_approximate_number_of_messages_visible{queue_name=~"slack-knowledge-bot-audit-dlq-.*"}) >= 1
           for: 5m

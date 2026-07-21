@@ -21,7 +21,7 @@ npm run dev                # tsx watch src/index.ts — serves :3001 (/health + 
 In Slack: `@slack-knowledge-bot what's our vacation policy?`
 
 ```bash
-npm run check              # typecheck + lint + format:check + test (CI parity, one shot)
+npm run check              # typecheck + lint + format:check + test + platform.yaml gate (CI parity, one shot)
 ```
 
 ## Contract surface
@@ -88,8 +88,8 @@ The application Deployment plus everything that supports it. Templates under `ch
 | `externalsecret.yaml`                                                 | ESO syncs `slack-knowledge-bot/<env>/app-secrets` + `slack-knowledge-bot/<env>/db-credentials` from Secrets Manager                   |
 | `networkpolicy.yaml`                                                  | Default-deny + egress allow-list (AWS APIs, Slack/WorkOS/Notion/Confluence/Drive HTTPS, RDS + Redis on the VPC CIDR)                  |
 | `audit-consumer-deployment.yaml` + `audit-consumer-scaledobject.yaml` | The SQS-drain Deployment (`dist/bin/audit-consumer.js`), KEDA-scaled 0..5 on audit queue depth                                        |
-| `prometheusrule.yaml`                                                 | Four alerts — QueryP95, LLMError, AuditTotalLoss, AuditDlqDepth                                                                       |
-| `grafana-dashboard.yaml`                                              | ConfigMap loading `chart/dashboards/slack-knowledge-bot.json`                                                                         |
+| `prometheusrule.yaml`                                                 | SLO alerts — QueryP95, LLMError, AuditTotalLoss (+ AuditDlqDepth behind `auditDlq.cloudwatchExporterEnabled`); opt-in via `prometheusRule.enabled` |
+| `grafana-dashboard.yaml`                                              | `GrafanaDashboard` CR loading `chart/dashboards/slack-knowledge-bot.json`, reconciled onto Amazon Managed Grafana                     |
 
 `values.yaml` is the base; `values-staging.yaml` / `values-production.yaml` carry the per-env deltas (image tag, replica count). The image is `ghcr.io/nanohype/slack-knowledge-bot`. OTel attrs `agents.tenant=workplace` + `agents.platform=slack-knowledge-bot` are set in every values file (required by the platform-tenant contract).
 
@@ -97,7 +97,7 @@ The application Deployment plus everything that supports it. Templates under `ch
 
 A valid tenant in this repo is exactly these three, plus the chart's per-env values:
 
-- `platform.yaml` — the `BudgetPolicy` + `Platform` CRs
+- `platform.yaml` — the cluster-scoped `Tenant` plus the `BudgetPolicy` + `Platform` CRs. `npm run platform:validate` validates all three against the eks-agent-platform CRD schemas vendored under `schemas/crd/` — structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references. It runs in `npm run check` and in CI.
 - `chart/` — the chart above, with `values.yaml` + `values-staging.yaml` + `values-production.yaml`
 - `gitops/applicationset-entry.yaml` — the ApplicationSet entry registered into `nanohype/eks-gitops` (matrix generator over clusters × the app, Helm multi-source `$values` resolving `values.yaml` + `values-<env>.yaml`)
 
