@@ -66,7 +66,7 @@ kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
 
 ### 2c. GitOps
 
-`gitops/applicationset-entry.yaml` is registered in `nanohype/eks-gitops` (`applicationsets/apps-tenants.yaml`). ArgoCD renders the chart per cluster/env and rolls out the main `Deployment`, the `Ingress` (ingress-nginx + cert-manager TLS for `/health` + `/oauth/:provider/{start,callback}`), and the KEDA-scaled audit-consumer `Deployment`. New image tags flow: release workflow → GHCR → ArgoCD auto-syncs.
+`gitops/applicationset-entry.yaml` is registered in `nanohype/eks-gitops` (`applicationsets/apps-tenants.yaml`). ArgoCD renders the chart per cluster/env and rolls out the main `Deployment`, the `Ingress` (cert-manager TLS for `/health` + `/oauth/:provider/{start,callback}`), and the KEDA-scaled audit-consumer `Deployment`. New image tags flow: release workflow → GHCR → ArgoCD auto-syncs.
 
 The ingress hostname is whatever `chart/values-staging.yaml` sets under `ingress.hosts[0].host` (e.g. `slack-knowledge-bot-staging.example.com`); cert-manager issues its TLS cert. That hostname is `APP_BASE_URL` for the env.
 
@@ -430,7 +430,7 @@ Every non-obvious failure we've seen during this project is indexed here. Sympto
 
 **Symptom:** `curl https://slack-knowledge-bot-staging.example.com/health` fails with a TLS error or connection refused, even though the pod is `Running`.
 
-**Root cause:** the ingress-nginx `Ingress` or its cert-manager-issued certificate hasn't finished provisioning. The ACME HTTP-01/DNS-01 challenge can lag a few minutes, and DNS for the host must resolve to the ingress controller's load balancer first.
+**Root cause:** no controller has claimed the `Ingress`, or its cert-manager-issued certificate hasn't finished provisioning. Check first that a controller serving `ingress.className` (default `nginx`) is actually running — the eks-gitops catalog ships none. The ACME HTTP-01/DNS-01 challenge can lag a few minutes, and DNS for the host must resolve to the ingress controller's load balancer first.
 
 **Fix:** check the ingress + certificate status, and that DNS points at the ingress controller:
 ```bash

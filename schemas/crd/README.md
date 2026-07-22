@@ -1,83 +1,74 @@
-# Vendored CRD schemas
+# Vendored operator CRD schemas
 
-Byte-identical copies of the `controller-gen` output in
-[`nanohype/eks-agent-platform`](https://github.com/nanohype/eks-agent-platform)
-under `operators/config/crd/bases/`. They are the schemas
-`scripts/validate-platform-manifests.mjs` checks `platform.yaml` against.
+The `Tenant`, `Platform`, and `BudgetPolicy` CustomResourceDefinitions from
+[`nanohype/eks-agent-platform`](https://github.com/nanohype/eks-agent-platform),
+`operators/config/crd/bases/` — controller-gen output, copied byte for byte.
+`scripts/validate-platform-manifests.mjs` validates `platform.yaml` against
+these files, so they are the gate's ground truth.
 
-| File                                          | Kind           | Scope      |
-| --------------------------------------------- | -------------- | ---------- |
-| `platform.nanohype.dev_tenants.yaml`           | `Tenant`       | Cluster    |
-| `platform.nanohype.dev_platforms.yaml`         | `Platform`     | Namespaced |
-| `governance.nanohype.dev_budgetpolicies.yaml`  | `BudgetPolicy` | Namespaced |
+**Never hand-edit them.** Fix the API types upstream, regenerate there, then
+re-vendor here.
 
-`source.json` records the upstream repository, the path, the commit the copies
-were taken from, and a SHA-256 per file.
+## source.json
 
-## Why vendored rather than fetched
+`source.json` records where the copies came from — `upstream.repository`,
+`upstream.path`, the pinned `upstream.ref` — plus a SHA-256 per file. The two
+pins do different jobs:
 
-The validator runs on every pull request, including from forks. Fetching the
-schema at gate time makes the verdict depend on a third party being reachable,
-and the tempting failure handler — skip validation when the fetch fails — is
-the exact shape of bug this gate exists to catch. Reading the schema out of the
-working tree makes the result a pure function of the commit under test.
+- **`upstream.ref`** makes the gate deterministic. The schema CI validates
+  against today is the schema it validated against yesterday; adopting a newer
+  operator API is an explicit commit that moves the SHA. It must be a full
+  40-character commit SHA: a branch name would make the verdict depend on when
+  the gate ran.
+- **`sha256`** makes the copies tamper-evident with no network. The validator
+  hashes every file against its record before parsing it, so editing a vendored
+  schema to admit the manifest under review — widening an enum, dropping a
+  `required` entry — aborts the run.
 
-## The two ways a vendored copy can lie, and what catches each
+Neither check subsumes the other, and each covers the other's blind spot:
 
-**Edited in place.** A widened enum or a dropped `required` entry leaves the
-file valid YAML and leaves the gate happily validating against a weaker schema
-than the API server enforces. `source.json` carries a SHA-256 per file, and
-`validate-platform-manifests.mjs` verifies every digest before it reads a
-single schema. Its `--self-test` mutates a schema in memory and fails unless
-the digest check rejects it, so the integrity path is exercised on every run
-rather than trusted.
+| | edited copy, digest not updated | edited copy, digest updated to match | pin no longer describes the copies |
+| --- | --- | --- | --- |
+| `npm run platform:validate` (offline) | fails | passes | passes |
+| `npm run schemas:check` (upstream at the pinned ref) | fails | **fails** | **fails** |
 
-**Stale or hand-moved pin.** Bumping `upstream.ref` without re-vendoring, or
-re-vendoring without moving the pin, leaves the digests agreeing with each
-other while describing a commit whose schemas are different.
-`sync-crd-schemas.mjs --check` reads each file from upstream *at the pinned
-ref* and requires byte equality, so the pin and its contents cannot diverge.
-The `crd-schema-drift` CI job checks that SHA out and runs it on every PR.
+Both run in CI, and both fail loudly: an unreachable upstream, a missing file,
+undeclared YAML in this directory, or a checkout whose HEAD is not the pinned
+commit exits non-zero rather than skipping.
 
-Both halves fail loudly. An unreachable upstream, a missing file, a checkout on
-the wrong commit, or a fetched file that is not a CRD all exit non-zero — there
-is no path that reports success without having compared something.
+## Pin fidelity, not freshness
 
-## Refreshing
+`schemas:check` asks one question: do the vendored bytes equal upstream **at the
+pinned ref**? That answer depends only on the commit under test, which is what a
+blocking gate needs — a required check that turns red because someone pushed to
+another repository is not reproducible, and teaches people to re-run CI instead
+of reading it.
 
-```sh
-# re-vendor at the currently pinned ref (repairs a damaged copy)
-npm run schemas:sync
+Whether the pin has fallen behind upstream is a real question with a different
+shape: its answer changes on someone else's schedule, and nothing is broken when
+it comes back "behind" — the copies still match the commit they claim.
+`npm run schemas:freshness` answers it, and the `crd-schema-freshness` workflow
+runs it weekly (and on demand). It is never wired into pull-request CI.
 
-# adopt a newer operator API: move the pin and re-vendor in one step
-npm run schemas:sync -- --ref=<40-char-sha>
+## Commands
+
+```bash
+npm run platform:validate   # the gate: digests, then platform.yaml, then a self-test
+npm run schemas:sync        # re-vendor the copies + digests from the pinned ref
+npm run schemas:check       # blocking drift gate: copies vs upstream at the pinned ref
+npm run schemas:freshness   # scheduled-only: has the pin fallen behind upstream?
 ```
 
-Both rewrite `source.json`'s digests. Review the schema diff and ship it with
-whatever `platform.yaml` change it implies. Fixes belong upstream — never
-hand-edit a file in this directory.
+Upstream resolves two ways, both deterministic. With `$EKS_AGENT_PLATFORM_DIR`
+set the files come from that checkout — under `--check` its HEAD must be the
+pinned commit, so a working tree on some other commit is an error rather than a
+silent substitution. Without it they are fetched from raw.githubusercontent.com
+at the pinned commit. An unreachable upstream is a failure, never a skip.
 
-Verify without writing (what CI runs):
+## Adopting a newer operator API
 
-```sh
-npm run schemas:check
-```
-
-It reads upstream from `raw.githubusercontent.com` at the pinned ref by
-default; set `EKS_AGENT_PLATFORM_DIR` to a checkout of that exact commit to run
-it offline.
-
-## What the gate does and does not enforce
-
-`controller-gen` emits OpenAPI v3 schemas without `additionalProperties: false`,
-so an off-the-shelf JSON Schema validator accepts any invented field —
-Kubernetes then prunes it silently at apply time. The validator therefore walks
-the schema itself and rejects properties that are not declared, alongside the
-usual `required` / `type` / `enum` / `pattern` / bounds checks, and asserts each
-kind's scope from the CRD's own `spec.scope`.
-
-It does not evaluate `x-kubernetes-validations` CEL rules. The one that
-constrains this manifest — `Platform.spec.identity`'s mutual exclusion of
-`allowedModels` and `allowedModelFamilies` — is asserted explicitly in the
-validator's consistency pass instead. The rest are enforced by the API server
-at admission.
+1. `npm run schemas:sync -- --ref=<40-char-sha>` — moves the pin and rewrites
+   the copies and their digests in one step, so the two cannot drift apart.
+2. `npm run platform:validate` — a CRD change that invalidates `platform.yaml`
+   surfaces here, before a cluster sees it.
+3. Commit the schema diff, the pin move, and any manifest changes together.

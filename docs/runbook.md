@@ -63,7 +63,7 @@ The infrastructure splits across three layers:
   default-deny NetworkPolicy, the ArgoCD AppProject, and the
   `<env>-slack-knowledge-bot-tenant` IAM role.
 - **Chart** — `chart/` renders the two Deployments, Service, Ingress
-  (ingress-nginx + cert-manager TLS), ExternalSecret, NetworkPolicy, the
+  (cert-manager TLS), ExternalSecret, NetworkPolicy, the
   audit-consumer ScaledObject, PrometheusRule, and the Grafana dashboard.
 
 ### 3.1 First-Time Deploy
@@ -90,7 +90,7 @@ kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
 
 # 4. GitOps — register gitops/applicationset-entry.yaml into nanohype/eks-gitops
 #    (applicationsets/apps-tenants.yaml). ArgoCD renders the chart per cluster/env
-#    and rolls out the main Deployment, the Ingress (ingress-nginx + cert-manager
+#    and rolls out the main Deployment, the Ingress (cert-manager
 #    TLS for /health + /oauth/:provider/{start,callback}), and the KEDA-scaled
 #    audit-consumer Deployment.
 
@@ -133,7 +133,7 @@ CI lives at `.github/workflows/ci.yml`. Triggers on push to `main` and on PRs ta
 8. The grep-enforced invariants: SDK-mock ban, bare-fetch ban, Slack WebClient construction
 9. `npm run platform:validate` — every document in `platform.yaml` validated against the eks-agent-platform CRD schemas vendored under `schemas/crd/` (SHA-256-verified first, then structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references), followed by the gate's own self-test — which breaks the manifest four ways and tampers with a vendored schema, and fails unless each is rejected
 10. `node scripts/sync-vendored.mjs --check` against a fresh nanohype checkout (vendored copies must be byte-identical)
-11. `npm run schemas:check` in the `crd-schema-drift` job — eks-agent-platform checked out at the SHA pinned in `schemas/crd/source.json`, and every vendored schema required to match both its recorded digest and those upstream bytes. Catches a pin bumped without re-vendoring as readily as a copy edited by hand
+11. `npm run schemas:check` in the `crd-schema-drift` job — eks-agent-platform checked out at the SHA pinned in `schemas/crd/source.json`, and every vendored schema required to match both its recorded digest and those upstream bytes. Catches a pin bumped without re-vendoring as readily as a copy edited by hand. It does not ask whether that pin is the newest commit upstream: that answer changes on someone else's push, so the scheduled `crd-schema-freshness` workflow asks it instead
 12. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
 13. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
 14. `docker build` (no push)

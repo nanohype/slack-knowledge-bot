@@ -59,7 +59,7 @@ The generator handles empty context gracefully — if the retriever's breaker is
 
 - **Not its own cloud substrate.** It does not provision DynamoDB, Aurora, Redis, SQS, S3, or KMS. Those are landing-zone (see Boundaries). The chart consumes their outputs.
 - **Not a model host.** Bedrock runs Claude and Titan inference outside the cluster on-account. No self-hosted models.
-- **Not a cluster bootstrap.** The EKS cluster, ArgoCD, and the cluster addons it depends on (ESO, KEDA, ingress-nginx, cert-manager, the observability stack) must already exist (eks-gitops).
+- **Not a cluster bootstrap.** The EKS cluster, ArgoCD, and the cluster addons it depends on (ESO, KEDA, cert-manager, external-dns, the AWS Load Balancer Controller, the observability stack) must already exist (eks-gitops).
 - **Not the tenant operator.** It declares a `Platform` CR; the `eks-agent-platform` operator provisions the workload namespace, the tenant IAM role, and the AppProject.
 - **Not an indexer.** This repo answers over an existing index; document ingestion/embedding into the retrieval backend is a separate concern.
 
@@ -87,5 +87,5 @@ The chart assumes these cluster-level capabilities are already installed and rec
 
 - **External Secrets Operator** — backs `externalsecret.yaml` (syncs `slack-knowledge-bot/<env>/app-secrets` + `db-credentials` from Secrets Manager)
 - **KEDA** — backs `audit-consumer-scaledobject.yaml` (scales the audit consumer 0..5 on SQS queue depth)
-- **ingress-nginx** + **cert-manager** — back `ingress.yaml` (TLS for `/health` and the OAuth callback routes)
+- **an ingress controller** + **cert-manager** — back `ingress.yaml` (TLS for `/health` and the OAuth callback routes). cert-manager is in the eks-gitops bootstrap catalog. A controller serving the class this chart requests (`ingress.className`, default `nginx`) is **not**: the networking addons are the AWS Load Balancer Controller, Cilium, external-dns, and the mcp-tunnel. Until that gap closes, the rendered `Ingress` gets no address on an eks-gitops cluster — set `ingress.className` to a class the target cluster serves, or add a controller for `nginx` to the catalog. The OAuth callback routes are public, so this is a prerequisite for the delegation flow, not a nicety
 - **observability stack** — the cluster Grafana Alloy OTLP receiver (`alloy.monitoring.svc.cluster.local:4318`) and log forwarder that carry traces/metrics/logs to the Grafana backends. The app emits OTLP and structured JSON to stderr; there are no per-pod sidecars. The `grafana-dashboard.yaml` `GrafanaDashboard` CR loads into that stack via the grafana-operator. The `prometheusrule.yaml` alerts do not: they ship disabled because the stack runs no rule evaluator (gap G-01 in `docs/compliance-checklist.md`).

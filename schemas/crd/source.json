@@ -1,5 +1,5 @@
 {
-  "_README": "Provenance and integrity manifest for the vendored CRD schemas in this directory. The files are byte-identical copies of the controller-gen output in nanohype/eks-agent-platform at `upstream.ref` — never hand-edit them. `sha256` is verified by scripts/validate-platform-manifests.mjs before any schema is used, and `npm run schemas:check` re-verifies both the digests and the bytes against upstream at the pinned ref. See README.md in this directory.",
+  "_README": "Where the vendored CRD schemas in this directory come from. The files are byte-identical copies of the controller-gen output in nanohype/eks-agent-platform at `upstream.ref` — never hand-edit them. `sha256` is verified by scripts/validate-platform-manifests.mjs before any schema is parsed, and `npm run schemas:check` re-verifies the digests and matches the bytes against upstream at that same ref. `npm run schemas:sync -- --ref=<sha>` moves the pin and rewrites the digests together. See README.md in this directory.",
   "upstream": {
     "repository": "nanohype/eks-agent-platform",
     "path": "operators/config/crd/bases",

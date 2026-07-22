@@ -35,7 +35,7 @@ task ci   # build + lint + typecheck + test + format:check + helm lint/template 
 
 Ships as a [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) Platform tenant. The trio:
 
-- **`chart/`** — the application Helm chart: Deployment + Service + Ingress (ingress-nginx + cert-manager) + NetworkPolicy + ServiceAccount (Pod Identity) + ExternalSecret (ESO), plus the KEDA-scaled audit consumer, the opt-in PrometheusRule alerts, and a Grafana dashboard reconciled onto Amazon Managed Grafana. Per-env deltas in `chart/values-{staging,production}.yaml`.
+- **`chart/`** — the application Helm chart: Deployment + Service + Ingress (cert-manager TLS) + NetworkPolicy + ServiceAccount (Pod Identity) + ExternalSecret (ESO), plus the KEDA-scaled audit consumer, the opt-in PrometheusRule alerts, and a Grafana dashboard reconciled onto Amazon Managed Grafana. Per-env deltas in `chart/values-{staging,production}.yaml`.
 - **`platform.yaml`** — three CRs declaring the tenant boundary: the cluster-scoped `Tenant` (`workplace`, the owning team), the `BudgetPolicy` that `Platform.spec.budget` references, and the `Platform` itself. The `BudgetPolicy` and `Platform` are applied into the team's CR-home namespace `tenants-workplace`; the `Tenant` is cluster-scoped and takes no namespace. The operator provisions the `tenants-slack-knowledge-bot` workload namespace, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. `npm run platform:validate` checks the file against the vendored CRD schemas.
 - **`gitops/applicationset-entry.yaml`** — the ApplicationSet entry registered into [`nanohype/eks-gitops`](https://github.com/nanohype/eks-gitops) for ArgoCD reconciliation.
 
