@@ -63,7 +63,7 @@ The infrastructure splits across three layers:
   default-deny NetworkPolicy, the ArgoCD AppProject, and the
   `<env>-slack-knowledge-bot-tenant` IAM role.
 - **Chart** — `chart/` renders the two Deployments, Service, Ingress
-  (cert-manager TLS), ExternalSecret, NetworkPolicy, the
+  (ALB, ACM TLS), ExternalSecret, NetworkPolicy, the
   audit-consumer ScaledObject, PrometheusRule, and the Grafana dashboard.
 
 ### 3.1 First-Time Deploy
@@ -90,11 +90,11 @@ kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
 
 # 4. GitOps — register gitops/applicationset-entry.yaml into nanohype/eks-gitops
 #    (applicationsets/apps-tenants.yaml). ArgoCD renders the chart per cluster/env
-#    and rolls out the main Deployment, the Ingress (cert-manager
-#    TLS for /health + /oauth/:provider/{start,callback}), and the KEDA-scaled
+#    and rolls out the main Deployment, the Ingress (ALB, ACM TLS
+#    for /health + /oauth/:provider/{start,callback}), and the KEDA-scaled
 #    audit-consumer Deployment.
 
-# 5. Confirm the rollout (APP_BASE_URL is the cert-manager ingress hostname).
+# 5. Confirm the rollout (APP_BASE_URL is the ingress hostname for the env).
 kubectl -n tenants-slack-knowledge-bot rollout status deploy/slack-knowledge-bot
 curl -fsS "https://$APP_BASE_URL/health"
 ```

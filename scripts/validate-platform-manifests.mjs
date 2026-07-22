@@ -37,12 +37,15 @@
  * The schemas are vendored under `schemas/crd/` with SHA-256 digests in
  * `schemas/crd/source.json` (see `scripts/sync-crd-schemas.mjs`). They are read
  * off disk and their digests verified before anything is validated: a missing,
- * unreadable, or altered schema aborts the run. A gate that passes because it
- * could not find its schema is worse than no gate, and a gate that validates
- * against a schema someone widened by hand is worse still — it reports a
- * verdict about a schema the API server has never seen. `--self-test` covers
- * that case too: it mutates a vendored schema in memory and fails unless the
- * digest check rejects it.
+ * unreadable, altered, or undeclared schema aborts the run. A gate that passes
+ * because it could not find its schema is worse than no gate, and a gate that
+ * validates against a schema someone widened by hand is worse still — it
+ * reports a verdict about a schema the API server has never seen. The
+ * undeclared case is the same hole from the other side: a `.yaml` in
+ * `schemas/crd/` that `source.json` does not list has no recorded digest, so
+ * nothing here can tell it from an edit. `--self-test` covers the tamper case
+ * directly: it mutates a vendored schema in memory and fails unless the digest
+ * check rejects it.
  *
  * Freshness of the vendored copies is the other half, and it lives in
  * `scripts/sync-crd-schemas.mjs --check`: CI compares them byte-for-byte
@@ -127,6 +130,29 @@ async function loadSchemas() {
   }
   if (!Array.isArray(source.files) || source.files.length === 0) {
     throw new GateError("schemas/crd/source.json declares no schema files");
+  }
+
+  // A schema on disk that source.json does not declare has no recorded digest,
+  // so the loop below never hashes it and nothing here can tell it from an
+  // edit. Left unchecked, dropping a hand-written CRD into schemas/crd/ is a
+  // way to hand the walker a schema the gate never verified. Reject it.
+  const declared = new Set(source.files.map((entry) => entry.file));
+  let present;
+  try {
+    present = (await readdir(SCHEMA_DIR)).filter((f) => f.endsWith(".yaml"));
+  } catch (err) {
+    throw new GateError(
+      `cannot read the vendored CRD schemas in schemas/crd (${err.message}). ` +
+        "Restore them with `npm run schemas:sync`.",
+    );
+  }
+  const stray = present.filter((f) => !declared.has(f)).sort();
+  if (stray.length > 0) {
+    throw new GateError(
+      `schemas/crd/ holds YAML that source.json does not declare: ${stray.join(", ")}. ` +
+        "An undeclared schema carries no recorded digest, so the gate cannot verify it — " +
+        "record it with `npm run schemas:sync`, or delete it.",
+    );
   }
 
   const registry = new Map();

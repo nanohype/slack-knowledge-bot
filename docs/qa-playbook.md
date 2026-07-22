@@ -18,7 +18,7 @@ This doc is operator-first: paste-ready commands, exact console click-paths, zer
 | `argocd` CLI (optional) | Inspect ArgoCD app sync/health from the terminal |
 | Node 24 + npm | Matches the Docker base image and CI runtime |
 | Slack workspace admin | To create the bot app, enable Socket Mode, install |
-| A public domain you own | cert-manager TLS + DNS for the ingress; OAuth providers reject non-HTTPS callbacks |
+| A public domain you own, with an ACM certificate for it | TLS for the ALB + DNS for the ingress; OAuth providers reject non-HTTPS callbacks |
 | Gmail (or any email) | WorkOS Directory Sync signup |
 
 Set the AWS profile + region for everything that follows, and point `kubectl` at the target cluster:
@@ -66,9 +66,9 @@ kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
 
 ### 2c. GitOps
 
-`gitops/applicationset-entry.yaml` is registered in `nanohype/eks-gitops` (`applicationsets/apps-tenants.yaml`). ArgoCD renders the chart per cluster/env and rolls out the main `Deployment`, the `Ingress` (cert-manager TLS for `/health` + `/oauth/:provider/{start,callback}`), and the KEDA-scaled audit-consumer `Deployment`. New image tags flow: release workflow → GHCR → ArgoCD auto-syncs.
+`gitops/applicationset-entry.yaml` is registered in `nanohype/eks-gitops` (`applicationsets/apps-tenants.yaml`). ArgoCD renders the chart per cluster/env and rolls out the main `Deployment`, the `Ingress` (ALB, ACM TLS, for `/health` + `/oauth/:provider/{start,callback}`), and the KEDA-scaled audit-consumer `Deployment`. New image tags flow: release workflow → GHCR → ArgoCD auto-syncs.
 
-The ingress hostname is whatever `chart/values-staging.yaml` sets under `ingress.hosts[0].host` (e.g. `slack-knowledge-bot-staging.example.com`); cert-manager issues its TLS cert. That hostname is `APP_BASE_URL` for the env.
+The ingress hostname is whatever `chart/values-staging.yaml` sets under `ingress.hosts[0].host` (e.g. `slack-knowledge-bot-staging.example.com`); the ALB serves it with an ACM certificate matching that name. That hostname is `APP_BASE_URL` for the env.
 
 **Verify:**
 
@@ -85,7 +85,7 @@ curl -s "https://slack-knowledge-bot-staging.example.com/health"
 # → {"status":"ok","service":"slack-knowledge-bot"}
 ```
 
-**Can go wrong:** [B.1 Ingress / cert-manager TLS not ready](#b1-ingress--cert-manager-tls-not-ready) • [B.2 Pod crash-loops at boot with Zod validation](#b2-pod-crash-loops-at-boot-with-zod-validation)
+**Can go wrong:** [B.1 Ingress not ready](#b1-ingress-not-ready) • [B.2 Pod crash-loops at boot with Zod validation](#b2-pod-crash-loops-at-boot-with-zod-validation)
 
 ---
 
@@ -426,17 +426,18 @@ Q2 2026 priorities for Engineering: (1) Ship the knowledge bot to general availa
 
 Every non-obvious failure we've seen during this project is indexed here. Symptom → root cause → fix.
 
-### B.1 Ingress / cert-manager TLS not ready
+### B.1 Ingress not ready
 
 **Symptom:** `curl https://slack-knowledge-bot-staging.example.com/health` fails with a TLS error or connection refused, even though the pod is `Running`.
 
-**Root cause:** no controller has claimed the `Ingress`, or its cert-manager-issued certificate hasn't finished provisioning. Check first that a controller serving `ingress.className` (default `nginx`) is actually running — the eks-gitops catalog ships none. The ACME HTTP-01/DNS-01 challenge can lag a few minutes, and DNS for the host must resolve to the ingress controller's load balancer first.
+**Root cause:** the AWS Load Balancer Controller has not finished provisioning the ALB, it could not find an ACM certificate for the host, or the Route53 record external-dns writes has not propagated. An `Ingress` with no `ADDRESS` means the controller has not claimed it — check the controller is running and that the `alb` IngressClass exists. An `ADDRESS` but a TLS error usually means no ACM certificate matches the host; issue one, or pin it with `ingress.tls.certificateArn`.
 
-**Fix:** check the ingress + certificate status, and that DNS points at the ingress controller:
+**Fix:** check the ingress address, the controller's own view of it, and DNS:
 ```bash
-kubectl -n tenants-slack-knowledge-bot get ingress slack-knowledge-bot
-kubectl -n tenants-slack-knowledge-bot get certificate
-kubectl -n tenants-slack-knowledge-bot describe certificate slack-knowledge-bot   # look for Ready=True
+kubectl -n tenants-slack-knowledge-bot get ingress slack-knowledge-bot   # ADDRESS must be populated
+kubectl -n tenants-slack-knowledge-bot describe ingress slack-knowledge-bot
+kubectl -n kube-system logs deploy/aws-load-balancer-controller --tail=50
+dig +short slack-knowledge-bot-staging.example.com
 ```
 If the certificate is stuck, inspect its `CertificateRequest`/`Order`/`Challenge` objects (`kubectl -n tenants-slack-knowledge-bot get challenge`). Once `Ready=True` and DNS resolves, the `/health` curl succeeds.
 

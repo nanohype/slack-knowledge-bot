@@ -70,13 +70,39 @@ probes:
     timeoutSeconds: 5
     failureThreshold: 3
 
+# The public HTTP surface: the health endpoint and the OAuth start/callback
+# routes the delegation flow redirects through. Those callbacks are reached from
+# the browser after an identity provider redirect, so this Ingress is a
+# prerequisite for the flow, not a nicety.
+#
+# The eks-gitops catalog's ingress implementation is the AWS Load Balancer
+# Controller (addons/networking/aws-load-balancer-controller). It creates an
+# `alb` IngressClass and does not mark it the cluster default, so the class is
+# named explicitly. external-dns runs with `sources: [service, ingress]` and
+# publishes a Route53 record for each host off this object. On a cluster
+# participating in a VPC it does not own, the Kyverno `inject-adopt-lb-subnets`
+# policy fills in the subnet annotation from the scheme set below.
 ingress:
   enabled: true
-  className: nginx
+  className: alb
+  # internal | internet-facing. The controller defaults to internal when unset;
+  # the OAuth redirect lands here from a browser outside the VPC, so say so.
+  scheme: internet-facing
+  # Cilium runs ENI IPAM with native routing, so pod IPs are VPC IPs and the ALB
+  # registers pods directly. Instance targets would need a NodePort Service.
+  targetType: ip
   tls:
     enabled: true
-    # cert-manager Issuer name (cluster-issuer typically)
-    issuer: letsencrypt-prod
+    # ACM certificate for the hosts below. Left empty, the controller discovers
+    # a certificate in ACM whose domain matches a host on the rules. TLS
+    # terminates at the ALB — there is no in-cluster certificate and no Secret.
+    certificateArn: ''
+  # ALB target-group health check. The app serves /health unauthenticated;
+  # the controller would otherwise probe `/`, which is not a route.
+  healthcheckPath: /health
+  # Set the same value on several Ingresses to put them behind one shared ALB.
+  # Empty gives this Ingress a load balancer of its own.
+  groupName: ''
   hosts:
     # Set per-env in values-{env}.yaml
     - host: ''
@@ -155,15 +181,20 @@ auditConsumer:
 
 networkPolicy:
   enabled: true
-  # Ingress: only from ingress-nginx (public OAuth callbacks) and same-namespace
+  # Ingress: the load balancer (public OAuth callbacks) and same-namespace
   # (internal probes). Slack events arrive via Socket Mode (outbound WebSocket),
   # not inbound HTTP, so no Slack ingress rule needed.
+  #
+  # The ALB is not a pod, so it cannot be a namespaceSelector: with target-type
+  # ip the connection arrives from an ALB network interface in the cluster VPC,
+  # and the source is a VPC address. 10.0.0.0/8 is the range the landing-zone
+  # network component allocates VPC CIDRs from; narrow it to the public subnet
+  # CIDRs per-env where the blast radius matters.
   ingress:
     - from:
         - podSelector: {}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+        - ipBlock:
+            cidr: 10.0.0.0/8
       ports:
         - protocol: TCP
           port: 3001

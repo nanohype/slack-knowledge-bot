@@ -47,8 +47,10 @@ defining control is that **no query ever sees more than the asking user could se
 - Default-deny `NetworkPolicy` with an explicit egress allow-list (AWS APIs, the Slack /
   WorkOS / Notion / Confluence / Drive HTTPS endpoints, and RDS + Redis on the cluster VPC
   CIDR). IMDS is blocked.
-- Public surface is limited to `/health` and the OAuth `/start` + `/callback` routes behind
-  the cluster's ingress controller + cert-manager TLS.
+- Public surface is limited to `/health` and the OAuth `/start` + `/callback` routes behind an
+  ALB, which terminates TLS against an ACM certificate and redirects plaintext to HTTPS. The
+  NetworkPolicy admits that port from the VPC range the load balancer's interfaces sit in — the
+  ALB is not a pod, so it is a CIDR rule rather than a namespace selector.
 
 ## Known limitations
 
