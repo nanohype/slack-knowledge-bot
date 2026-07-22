@@ -11,7 +11,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
 - `templates/`
   - `deployment.yaml` — main app pod (env from values + secret refs from ExternalSecret)
   - `service.yaml` — ClusterIP on port 3001
-  - `ingress.yaml` — cert-manager TLS; requests `ingress.className` (default `nginx`), for which the eks-gitops catalog ships no controller
+  - `ingress.yaml` — `/health` and the OAuth start/callback routes on the `alb` class the eks-gitops load balancer controller serves; TLS terminates on the ALB against an ACM certificate
   - `serviceaccount.yaml` — name pinned to the app; bound to the operator-minted `<env>-slack-knowledge-bot-tenant` IAM role by a Pod Identity association (no role-arn annotation)
   - `externalsecret.yaml` — pulls app secrets + DB credentials from AWS Secrets Manager
   - `networkpolicy.yaml` — default-deny + egress allow-list
@@ -68,7 +68,7 @@ This chart owns the app's k8s surface. The cloud substrate and cluster addons si
 
 **Substrate (`landing-zone/components/aws/slack-knowledge-bot-platform/`):** VPC + private subnets, DynamoDB ×3, ElastiCache Redis, Aurora Serverless v2 (pgvector), SQS + DLQ, S3 audit bucket, KMS token-store key, and the seeded Secrets Manager `slack-knowledge-bot/<env>/app-secrets`. It binds the role to the chart's ServiceAccount via an EKS Pod Identity association. AWS Secrets Manager stays the source of truth; the chart's `externalsecret.yaml` syncs it into a k8s Secret via ESO.
 
-**Cluster addons (`eks-gitops`):** cert-manager + external-dns (which the `ingress` template depends on), the AWS Load Balancer Controller, the Grafana Alloy OTLP receiver at `alloy.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to Alloy, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
+**Cluster addons (`eks-gitops`):** the AWS Load Balancer Controller + external-dns (which the `ingress` template depends on), cert-manager, the Grafana Alloy OTLP receiver at `alloy.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to Alloy, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
 
 **This chart:** the main `Deployment`, the KEDA-scaled `audit-consumer-deployment.yaml` (`dist/bin/audit-consumer.js`, 0..5 replicas off SQS audit queue depth — consumer logic in `src/audit/audit-consumer.ts`, port-injected so unit tests fake the SDKs), the `ingress`, the default-deny `networkpolicy.yaml`, the `externalsecret.yaml`, plus observability that ships here rather than in eks-gitops:
 
