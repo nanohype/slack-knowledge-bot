@@ -131,11 +131,12 @@ CI lives at `.github/workflows/ci.yml`. Triggers on push to `main` and on PRs ta
 6. `npm run typecheck`, `npm run lint`, `npm run format:check`
 7. `npm run test:coverage` (threshold-enforced)
 8. The grep-enforced invariants: SDK-mock ban, bare-fetch ban, Slack WebClient construction
-9. `npm run platform:validate` — every document in `platform.yaml` validated against the eks-agent-platform CRD schemas vendored under `schemas/crd/` (structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references), followed by the gate's own self-test
+9. `npm run platform:validate` — every document in `platform.yaml` validated against the eks-agent-platform CRD schemas vendored under `schemas/crd/` (SHA-256-verified first, then structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references), followed by the gate's own self-test — which breaks the manifest four ways and tampers with a vendored schema, and fails unless each is rejected
 10. `node scripts/sync-vendored.mjs --check` against a fresh nanohype checkout (vendored copies must be byte-identical)
-11. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
-12. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
-13. `docker build` (no push)
+11. `npm run schemas:check` in the `crd-schema-drift` job — eks-agent-platform checked out at the SHA pinned in `schemas/crd/source.json`, and every vendored schema required to match both its recorded digest and those upstream bytes. Catches a pin bumped without re-vendoring as readily as a copy edited by hand
+12. `npm run build` (`tsc -p tsconfig.build.json` — emits `dist/`, excludes `*.test.ts`)
+13. `helm lint chart` + `helm template` against staging and production, asserting no unfilled sentinels in the rendered output
+14. `docker build` (no push)
 
 CI carries no cluster or AWS credentials. The release workflow builds the image, scans it, and publishes to GHCR; ArgoCD does the rollout.
 

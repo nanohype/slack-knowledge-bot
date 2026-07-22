@@ -97,7 +97,7 @@ The application Deployment plus everything that supports it. Templates under `ch
 
 A valid tenant in this repo is exactly these three, plus the chart's per-env values:
 
-- `platform.yaml` — the cluster-scoped `Tenant` plus the `BudgetPolicy` + `Platform` CRs. `npm run platform:validate` validates all three against the eks-agent-platform CRD schemas vendored under `schemas/crd/` — structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references. It runs in `npm run check` and in CI.
+- `platform.yaml` — the cluster-scoped `Tenant` plus the `BudgetPolicy` + `Platform` CRs. `npm run platform:validate` validates all three against the eks-agent-platform CRD schemas vendored under `schemas/crd/` — structure, scope, unknown fields, and the Tenant ↔ Platform ↔ BudgetPolicy ↔ chart-values references. Every vendored schema's SHA-256 is verified against `schemas/crd/source.json` first, so a hand-edited schema aborts the gate instead of weakening it. It runs in `npm run check` and in CI, alongside `npm run schemas:check`, which matches the vendored copies byte-for-byte against upstream at the pinned commit.
 - `chart/` — the chart above, with `values.yaml` + `values-staging.yaml` + `values-production.yaml`
 - `gitops/applicationset-entry.yaml` — the ApplicationSet entry registered into `nanohype/eks-gitops` (matrix generator over clusters × the app, Helm multi-source `$values` resolving `values.yaml` + `values-<env>.yaml`)
 

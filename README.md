@@ -46,7 +46,7 @@ The AWS substrate — DynamoDB tables, SQS + DLQ, S3 audit bucket, Aurora Server
 This repo owns the application — the Slack pipeline, the RAG logic, the per-user ACL enforcement, and the tenant trio that deploys it. It does **not** own:
 
 - AWS substrate (DynamoDB, SQS, S3, Aurora/pgvector, Redis, KMS, Secrets Manager) → the `slack-knowledge-bot-platform` component in [`landing-zone`](https://github.com/nanohype/landing-zone)
-- Cluster addons (ingress-nginx, cert-manager, external-secrets, KEDA, the OTel collector + log forwarder, kube-prometheus-stack) → [`eks-gitops`](https://github.com/nanohype/eks-gitops)
+- Cluster addons (cert-manager, external-secrets, KEDA, Grafana Alloy, the Grafana operator, Loki, Tempo) → [`eks-gitops`](https://github.com/nanohype/eks-gitops). Rule evaluation and alert routing are cluster-side too, and are not currently deployed — see gap G-01 in [`docs/compliance-checklist.md`](docs/compliance-checklist.md)
 
 ## License
 
