@@ -118,6 +118,13 @@ async function loadSchemas() {
         "vendored into this repo; restore them with `npm run schemas:sync`.",
     );
   }
+  if (!source.upstream?.repository || !/^[0-9a-f]{40}$/.test(source.upstream?.ref ?? "")) {
+    throw new GateError(
+      "schemas/crd/source.json needs `upstream.repository` and a full 40-character " +
+        "`upstream.ref` — a branch name pins nothing, and the digests below describe " +
+        "whatever commit that is.",
+    );
+  }
   if (!Array.isArray(source.files) || source.files.length === 0) {
     throw new GateError("schemas/crd/source.json declares no schema files");
   }

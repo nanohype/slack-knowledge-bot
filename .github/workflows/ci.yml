@@ -222,6 +222,11 @@ jobs:
       # upstream at the pinned commit. An unreachable checkout, a HEAD that is
       # not the pinned SHA, or a file that is not a CRD all fail the job —
       # nothing here degrades into a skip.
+      #
+      # Whether that pin has fallen behind upstream is a different question, and
+      # not one a required check may answer — its verdict would change when
+      # someone pushes to another repository. The scheduled crd-schema-freshness
+      # workflow asks it instead.
       - name: Vendored CRD schemas match the pinned upstream commit
         run: npm run schemas:check
         env:

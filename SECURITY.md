@@ -48,7 +48,7 @@ defining control is that **no query ever sees more than the asking user could se
   WorkOS / Notion / Confluence / Drive HTTPS endpoints, and RDS + Redis on the cluster VPC
   CIDR). IMDS is blocked.
 - Public surface is limited to `/health` and the OAuth `/start` + `/callback` routes behind
-  ingress-nginx + cert-manager TLS.
+  the cluster's ingress controller + cert-manager TLS.
 
 ## Known limitations
 

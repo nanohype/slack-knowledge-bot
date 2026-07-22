@@ -49,15 +49,20 @@ tasks:
     cmds:
       - npm run platform:validate
 
-  platform:sync-schemas:
-    desc: 'Re-vendor the CRD schemas from eks-agent-platform and rewrite the pin + digests'
+  schemas:sync:
+    desc: 'Re-vendor schemas/crd/ + digests from the ref pinned in schemas/crd/source.json'
     cmds:
       - npm run schemas:sync
 
-  platform:check-schemas:
+  schemas:check:
     desc: 'Verify the vendored CRD schemas against their digests and upstream at the pinned ref'
     cmds:
       - npm run schemas:check
+
+  schemas:freshness:
+    desc: 'Report whether the pinned operator ref has fallen behind upstream (never a merge gate)'
+    cmds:
+      - npm run schemas:freshness
 
   oauth:
     desc: 'slack-knowledge-bot-oauth package: lint + typecheck + test + build'
