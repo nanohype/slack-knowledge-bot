@@ -50,9 +50,14 @@ tasks:
       - npm run platform:validate
 
   platform:sync-schemas:
-    desc: 'Re-vendor the CRD schemas from an eks-agent-platform checkout and re-pin provenance'
+    desc: 'Re-vendor the CRD schemas from eks-agent-platform and rewrite the pin + digests'
     cmds:
-      - npm run sync:crd-schemas
+      - npm run schemas:sync
+
+  platform:check-schemas:
+    desc: 'Verify the vendored CRD schemas against their digests and upstream at the pinned ref'
+    cmds:
+      - npm run schemas:check
 
   oauth:
     desc: 'slack-knowledge-bot-oauth package: lint + typecheck + test + build'

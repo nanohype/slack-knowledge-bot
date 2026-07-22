@@ -2,9 +2,9 @@
 /**
  * Validate `platform.yaml` against the real eks-agent-platform CRD schemas.
  *
- *   node scripts/validate-platform-manifest.mjs             # the gate
- *   node scripts/validate-platform-manifest.mjs --self-test # prove the gate rejects
- *   node scripts/validate-platform-manifest.mjs <path>      # validate a copy elsewhere
+ *   node scripts/validate-platform-manifests.mjs             # the gate
+ *   node scripts/validate-platform-manifests.mjs --self-test # prove the gate rejects
+ *   node scripts/validate-platform-manifests.mjs <path>      # validate a copy elsewhere
  *
  * `platform.yaml` is applied by hand, once, before ArgoCD takes over. Nothing
  * else in this repo reads it, so a field typo, a missing required key, or a
@@ -35,10 +35,18 @@
  *      every `chart/values*.yaml` must agree with both.
  *
  * The schemas are vendored under `schemas/crd/` with SHA-256 digests in
- * `schemas/crd/provenance.json` (see `scripts/sync-crd-schemas.mjs`). They are
- * read off disk and their digests verified before anything is validated: a
- * missing, unreadable, or altered schema aborts the run. A gate that passes
- * because it could not find its schema is worse than no gate.
+ * `schemas/crd/source.json` (see `scripts/sync-crd-schemas.mjs`). They are read
+ * off disk and their digests verified before anything is validated: a missing,
+ * unreadable, or altered schema aborts the run. A gate that passes because it
+ * could not find its schema is worse than no gate, and a gate that validates
+ * against a schema someone widened by hand is worse still — it reports a
+ * verdict about a schema the API server has never seen. `--self-test` covers
+ * that case too: it mutates a vendored schema in memory and fails unless the
+ * digest check rejects it.
+ *
+ * Freshness of the vendored copies is the other half, and it lives in
+ * `scripts/sync-crd-schemas.mjs --check`: CI compares them byte-for-byte
+ * against nanohype/eks-agent-platform at the ref pinned in `source.json`.
  *
  * Not evaluated: CEL `x-kubernetes-validations`. The one rule that constrains
  * this manifest — allowedModels and allowedModelFamilies are mutually
@@ -69,29 +77,61 @@ class GateError extends Error {}
 // ── schema loading ──────────────────────────────────────────────────────────
 
 /**
+ * Verify one vendored schema's bytes against its recorded digest.
+ *
+ * Pulled out of the loading loop so `--self-test` can hand it a deliberately
+ * mutated buffer and assert the rejection, rather than the tamper check being
+ * a branch nothing ever takes.
+ *
+ * @param {string} file  filename under schemas/crd/
+ * @param {Buffer} raw   the bytes on disk
+ * @param {string} expected  the sha256 recorded in source.json
+ */
+function verifyDigest(file, raw, expected) {
+  const actual = createHash("sha256").update(raw).digest("hex");
+  if (actual !== expected) {
+    throw new GateError(
+      `vendored CRD schema schemas/crd/${file} does not match its recorded digest ` +
+        `(source.json records ${expected}, on disk ${actual}). The vendored schemas are ` +
+        "byte-identical copies of the operator's controller-gen output — they are never " +
+        "hand-edited. Restore them with `npm run schemas:sync`.",
+    );
+  }
+}
+
+/**
  * Read the vendored CRDs and verify them against the recorded digests.
  * Anything wrong here is fatal — the gate never runs on an unverified schema.
  *
- * @returns {Promise<Map<string, {kind: string, scope: string, schema: object}>>}
- *   keyed by `<apiVersion>|<kind>`.
+ * @returns {Promise<{registry: Map<string, {kind: string, scope: string, schema: object}>,
+ *   sample: {file: string, raw: Buffer, sha256: string}}>}
+ *   `registry` is keyed by `<apiVersion>|<kind>`; `sample` is one verified
+ *   schema the self-test tampers with.
  */
 async function loadSchemas() {
-  let provenance;
+  let source;
   try {
-    provenance = JSON.parse(await readFile(join(SCHEMA_DIR, "provenance.json"), "utf8"));
+    source = JSON.parse(await readFile(join(SCHEMA_DIR, "source.json"), "utf8"));
   } catch (err) {
     throw new GateError(
-      `cannot read schemas/crd/provenance.json (${err.message}). The CRD schemas are ` +
-        "vendored into this repo; restore them with `npm run sync:crd-schemas`.",
+      `cannot read schemas/crd/source.json (${err.message}). The CRD schemas are ` +
+        "vendored into this repo; restore them with `npm run schemas:sync`.",
     );
   }
-  if (!Array.isArray(provenance.files) || provenance.files.length === 0) {
-    throw new GateError("schemas/crd/provenance.json declares no schema files");
+  if (!Array.isArray(source.files) || source.files.length === 0) {
+    throw new GateError("schemas/crd/source.json declares no schema files");
   }
 
   const registry = new Map();
+  let sample = null;
 
-  for (const entry of provenance.files) {
+  for (const entry of source.files) {
+    if (!/^[0-9a-f]{64}$/.test(entry.sha256 ?? "")) {
+      throw new GateError(
+        `schemas/crd/source.json entry ${entry.file} carries no valid sha256 digest — the ` +
+          "gate refuses to validate against a schema it cannot verify.",
+      );
+    }
     const path = join(SCHEMA_DIR, entry.file);
     let raw;
     try {
@@ -99,17 +139,11 @@ async function loadSchemas() {
     } catch (err) {
       throw new GateError(
         `vendored CRD schema schemas/crd/${entry.file} is missing (${err.message}). ` +
-          "Restore it with `npm run sync:crd-schemas`.",
+          "Restore it with `npm run schemas:sync`.",
       );
     }
-    const actual = createHash("sha256").update(raw).digest("hex");
-    if (actual !== entry.sha256) {
-      throw new GateError(
-        `vendored CRD schema schemas/crd/${entry.file} does not match its recorded digest ` +
-          `(expected ${entry.sha256}, got ${actual}). Re-vendor with ` +
-          "`npm run sync:crd-schemas` so the pinned commit and the digests agree.",
-      );
-    }
+    verifyDigest(entry.file, raw, entry.sha256);
+    sample ??= { file: entry.file, raw, sha256: entry.sha256 };
 
     const crd = loadAll(raw.toString("utf8")).filter(Boolean)[0];
     if (crd?.kind !== "CustomResourceDefinition") {
@@ -131,7 +165,7 @@ async function loadSchemas() {
     }
   }
 
-  return registry;
+  return { registry, sample };
 }
 
 // ── strict schema walker ────────────────────────────────────────────────────
@@ -251,7 +285,7 @@ function validateDocument(doc, index, registry, errors) {
     errors.push(
       `${at} (${label}): no vendored CRD schema for ${doc.apiVersion} ${doc.kind}. ` +
         "Either the apiVersion/kind is wrong, or the schema needs vendoring via " +
-        "`npm run sync:crd-schemas`.",
+        "`npm run schemas:sync`.",
     );
     return null;
   }
@@ -404,12 +438,46 @@ const report = (errors) => {
 };
 
 /**
- * Break a copy of the real manifest three ways and assert each is rejected,
- * then assert the untouched manifest passes. Runs in memory — nothing is
- * written — so the gate's own rejection behaviour is CI-enforced rather than
- * asserted once by hand.
+ * Tamper with a verified schema in memory and assert the digest check rejects
+ * it. Without this the integrity half of the gate is a branch nothing exercises
+ * — and an unexercised rejection path is indistinguishable from no path at all.
+ *
+ * The mutation is the realistic one: widen an enum so a value the API server
+ * would refuse starts validating clean. It stays valid YAML and parses to a
+ * usable CRD, which is exactly why byte digests rather than schema
+ * plausibility are what catch it.
  */
-function selfTest(documents, registry, chartValues) {
+function schemaIntegritySelfTest(sample) {
+  const widened = Buffer.from(
+    sample.raw
+      .toString("utf8")
+      .replace(/^([ ]*)enum:\n\1(- .*)$/m, "$1enum:\n$1- tampered-by-self-test\n$1$2"),
+  );
+  if (widened.equals(sample.raw)) {
+    return [`could not construct a tampered copy of schemas/crd/${sample.file}`];
+  }
+  try {
+    verifyDigest(sample.file, widened, sample.sha256);
+  } catch (err) {
+    if (err instanceof GateError) {
+      out(`  PASS  rejects: a vendored schema edited in place (schemas/crd/${sample.file})`);
+      out(`          → ${err.message.split(". ")[0]}`);
+      return [];
+    }
+    throw err;
+  }
+  out(`  FAIL  rejects: a vendored schema edited in place (schemas/crd/${sample.file})`);
+  return [`a tampered copy of schemas/crd/${sample.file} passed the digest check`];
+}
+
+/**
+ * Break a copy of the real manifest four ways and assert each is rejected,
+ * tamper with a vendored schema and assert that is rejected too, then assert
+ * the untouched manifest passes. Runs in memory — nothing is written — so the
+ * gate's own rejection behaviour is CI-enforced rather than asserted once by
+ * hand.
+ */
+function selfTest(documents, registry, chartValues, sample) {
   const clone = () => JSON.parse(JSON.stringify(documents));
   const cases = [
     {
@@ -456,6 +524,8 @@ function selfTest(documents, registry, chartValues) {
     }
   }
 
+  failures.push(...schemaIntegritySelfTest(sample));
+
   const clean = validate(clone(), registry, chartValues);
   out(`  ${clean.length === 0 ? "PASS" : "FAIL"}  accepts: the committed platform.yaml`);
   if (clean.length > 0) failures.push(`committed platform.yaml rejected: ${clean.join("; ")}`);
@@ -464,14 +534,14 @@ function selfTest(documents, registry, chartValues) {
 }
 
 async function main() {
-  const registry = await loadSchemas();
+  const { registry, sample } = await loadSchemas();
   const documents = loadAll(await readFile(MANIFEST_PATH, "utf8")).filter(Boolean);
   if (documents.length === 0) throw new GateError(`${MANIFEST_PATH} contains no documents`);
   const chartValues = await loadChartValues();
 
   if (process.argv.includes("--self-test")) {
     out("platform.yaml gate — self-test");
-    const failures = selfTest(documents, registry, chartValues);
+    const failures = selfTest(documents, registry, chartValues, sample);
     if (failures.length > 0) {
       process.stderr.write(
         `gate self-test failed:\n${failures.map((f) => `  ✗ ${f}`).join("\n")}\n`,

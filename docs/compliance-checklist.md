@@ -22,8 +22,8 @@
 | Control | Implementation | Evidence |
 |---------|---------------|----------|
 | CC7.1 — Vulnerability detection | image scan (trivy); GitHub Dependabot/Renovate; npm audit CI step | CI pipeline |
-| CC7.2 — Monitoring anomalies | PrometheusRule alerts: DLQ depth, query latency p95, LLM error rate, audit total loss | `prometheusrule.yaml`; Grafana dashboard |
-| CC7.3 — Incident response | ops-incident runbook; Alertmanager → PagerDuty/Slack routing | Runbook document |
+| CC7.2 — Monitoring anomalies | **Partially operating.** Telemetry is collected: the app exports OTLP to Grafana Alloy, which remote-writes metrics to Amazon Managed Prometheus and ships traces to Tempo and logs to Loki; the ops dashboard is reconciled onto Amazon Managed Grafana. Nothing evaluates the anomaly expressions — see gap G-01. Detection is a human reading the dashboard or running PromQL. | `grafana-dashboard.yaml`; AMP/AMG query history. `prometheusrule.yaml` is **not** evidence — it ships disabled |
+| CC7.3 — Incident response | **Partially operating.** `docs/runbook.md` documents triage, escalation, and recovery per scenario, and is exercised by hand. There is no automated trigger: nothing pages, and nothing posts to a Slack channel — see gap G-01. | `docs/runbook.md` |
 
 ### CC9 — Risk Mitigation
 
@@ -39,6 +39,36 @@
 | A1.1 — Capacity planning | Aurora Serverless v2 pgvector (scales on load); HPA/KEDA scaling; rate limiter prevents abuse | chart + landing-zone substrate |
 | A1.2 — Monitoring | Grafana dashboard; pod liveness/readiness probes | `grafana-dashboard.yaml`; `deployment.yaml` probes |
 | A1.3 — Recovery | ArgoCD rollback to last-good revision; DDB point-in-time recovery | gitops + landing-zone substrate |
+
+### Control gaps
+
+Recorded here so no one attests to a control by reading past its absence.
+
+**G-01 — no alert evaluation and no notification path.**
+
+The cluster observability stack in
+[`eks-gitops/addons/observability/`](https://github.com/nanohype/eks-gitops/tree/main/addons/observability)
+is Grafana Alloy (OTLP in on 4317/4318, `otelcol.exporter.prometheus` →
+`prometheus.remote_write` to Amazon Managed Prometheus over SigV4, traces to
+Tempo, logs to Loki), plus kube-state-metrics, OpenCost, and the Grafana
+operator. `addons/bootstrap/` installs `prometheus-operator-crds` — the CRDs
+only. Two things follow:
+
+- **Nothing evaluates rules.** No Prometheus Operator ruler and no
+  kube-prometheus-stack run on these clusters, which is why this chart's
+  `prometheusrule.yaml` ships `prometheusRule.enabled: false`. The
+  `QueryP95LatencyBreach`, `LLMErrorRateSpike`, `AuditTotalLoss`, and
+  `AuditDlqDepthHigh` expressions are declared, reviewed, and unevaluated.
+- **Nothing routes a notification.** There is no Alertmanager in the catalog,
+  and no `GrafanaContactPoint` or `GrafanaNotificationPolicy` either. No alert
+  from this tenant reaches PagerDuty, Slack, or email.
+
+Closing it means authoring the four expressions as a `GrafanaAlertRuleGroup`
+evaluated by Amazon Managed Grafana against AMP — the delivery path the
+platform's own SLO rules already use — and provisioning a contact point plus
+notification policy in `eks-gitops`. Both are cluster-side work, outside this
+repo. Until they land, CC7.2 detection is manual and CC7.3 has a procedure with
+no trigger; neither should be represented as automated.
 
 ---
 
@@ -95,7 +125,7 @@
 - [ ] Onboarding DM privacy notice reviewed
 - [ ] PII scrubber tested against all patterns
 - [ ] Audit log retention policy configured (90-day DDB TTL + 365-day S3 lifecycle)
-- [ ] DLQ alert configured and routed to ops team
+- [ ] Audit DLQ depth alerting in place — **blocked on G-01**: the expression exists, nothing evaluates or routes it
 
 ### Access Controls
 - [ ] WorkOS Directory connected
@@ -105,7 +135,7 @@
 
 ### Operational Controls
 - [ ] Grafana dashboard configured
-- [ ] Alertmanager → PagerDuty/Slack routing tested
+- [ ] **G-01 closed** — the four alert expressions authored as a `GrafanaAlertRuleGroup` in `eks-gitops`, a contact point and notification policy provisioned, and one rule fired end-to-end to a real destination. Nothing pages until this is done
 - [ ] Runbook reviewed by ops team
 - [ ] DRP (Disaster Recovery Plan) documented
 - [ ] Change management process documented

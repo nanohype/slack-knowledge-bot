@@ -118,7 +118,12 @@ Pass condition: No content from Space B appears in Alice's response
 
 **Control:** SQS → KEDA-scaled audit-consumer Deployment → DDB (hot) + S3 (immutable cold). DLQ captures failures.
 
-**Verification:** PrometheusRule alert on DLQ depth > 0.
+**Verification:** query the DLQ directly
+(`aws sqs get-queue-attributes --attribute-names ApproximateNumberOfMessages`)
+or the `audit_total_loss_total` series in Amazon Managed Prometheus. The
+`AuditDlqDepthHigh` expression in `chart/templates/prometheusrule.yaml` is not
+an automated control — the rule ships disabled and the deployed stack runs no
+rule evaluator (see gap G-01 in `docs/compliance-checklist.md`).
 
 ---
 
