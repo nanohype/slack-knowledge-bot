@@ -53,10 +53,10 @@ Deployment. Operators touch git and `kubectl`, not the cluster's pods directly.
 
 The infrastructure splits across three layers:
 
-- **Substrate** — `landing-zone/components/aws/slack-knowledge-bot-platform/`
+- **Substrate** — `landing-zone/components/aws/tenant-substrate/`
   (OpenTofu/Terragrunt) provisions DynamoDB ×3 (tokens, audit, identity-cache),
   SQS + DLQ, the S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache
-  Redis, the KMS token key, and seeds `slack-knowledge-bot/<env>/app-secrets`.
+  Redis, and seeds `slack-knowledge-bot/<env>/app-secrets`.
 - **Platform CR** — `platform.yaml` declares slack-knowledge-bot as a tenant of
   the `workplace` team; the operator provisions the
   `tenants-slack-knowledge-bot` namespace, ResourceQuota, LimitRange,
@@ -69,11 +69,11 @@ The infrastructure splits across three layers:
 ### 3.1 First-Time Deploy
 
 ```bash
-# 1. Substrate — apply the landing-zone slack-knowledge-bot-platform component
-#    (DDB ×3, SQS + DLQ, S3 audit bucket, Aurora pgvector, ElastiCache Redis,
-#    the KMS token key, and the seeded slack-knowledge-bot/<env>/app-secrets).
-#    The <env>-slack-knowledge-bot-tenant role is bound to the ServiceAccount
-#    by the Pod Identity association landing-zone creates.
+# 1. Substrate — apply the landing-zone tenant-substrate component
+#    (DDB ×3, SQS + DLQ, S3 audit bucket, Aurora pgvector, ElastiCache Redis;
+#    app-secrets seeded out of band). The operator generates the tenant role's
+#    datastore-access policy and binds the tenant-runtime ServiceAccount to it
+#    via a Pod Identity association.
 
 # 2. Seed the app-level secrets. Full operator guide (JSON shape, CLI commands,
 #    where each value comes from, rotation) lives at docs/secrets.md. ESO syncs

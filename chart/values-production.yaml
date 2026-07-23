@@ -30,7 +30,7 @@ env:
   OTEL_RESOURCE_ATTRIBUTES: 'service.namespace=slack-knowledge-bot,service.version=0.1.0,deployment.environment=production,agents.tenant=workplace,agents.platform=slack-knowledge-bot'
 
 tenantInfra:
-  # Fill the empties below from the landing-zone slack-knowledge-bot-platform production
+  # Fill the empties below from the landing-zone tenant-substrate production
   # outputs (terragrunt output -json). Slot names match output names 1:1.
   dynamodbTableTokens: slack-knowledge-bot-production-tokens
   dynamodbTableAudit: slack-knowledge-bot-production-audit

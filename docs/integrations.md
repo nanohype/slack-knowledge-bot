@@ -81,7 +81,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **Factory** | `createRetriever({openSearch, bedrock, embeddingModelId})` (`src/rag/retriever.ts`), `createGenerator({bedrock, llmModelId, staleThresholdDays, …})` (`src/rag/generator.ts`) |
 | **Auth** | Pod Identity — the chart's ServiceAccount is bound to the `<env>-slack-knowledge-bot-tenant` role, whose `bedrock:InvokeModel` grant is clamped to the model IDs in the Platform CR's `spec.identity.allowedModels`. No API key. |
 | **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-4-6` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
-| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `slack-knowledge-bot-platform` component supplying the substrate grants — there's no app-level IAM. |
+| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `tenant-substrate` component supplying the substrate grants — there's no app-level IAM. |
 | **Verify** | `npm test -- --grep "retriever\|generator"` (RRF fusion ranking + dedup, Bedrock failure paths, stale-citation marker, circuit-breaker trip → empty hits) |
 | **Security** | Inference is on-account, so source content never reaches a third party. Bedrock model-invocation logging is governed at the landing-zone account/region level (an org/substrate concern) — it is not toggled by app code, a request header, or anything in this chart. See `docs/threat-model.md`. |
 
@@ -96,7 +96,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **Factory** | `createRetriever({backend, bedrock, embeddingModelId})` + `createPgvectorBackend({query, embeddingDim})` |
 | **Auth** | Aurora master credentials live in Secrets Manager at `slack-knowledge-bot/<env>/db-credentials`; the External Secrets Operator syncs them into a k8s Secret and the chart's Deployment injects them as `PGUSER` / `PGPASSWORD`. The Aurora security group allows ingress only from the cluster node SG on 5432. No public ingress. |
 | **Env vars** | `RETRIEVAL_BACKEND_URL` (takes precedence) OR the individual `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` fields (host/port/db from chart values; `PGUSER`/`PGPASSWORD` from the ESO-synced `db-credentials` Secret). Empty → null backend (retriever returns empty hits). |
-| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions Aurora Serverless v2 (pgvector) in the private subnet. Schema bootstrap (`CREATE EXTENSION vector` + `CREATE TABLE chunks` + indexes) runs idempotently at app startup. Ingestion (embedding + writing to `chunks`) is a separate pipeline, out of scope here. |
+| **Setup** | The landing-zone `tenant-substrate` component provisions Aurora Serverless v2 (pgvector) in the private subnet. Schema bootstrap (`CREATE EXTENSION vector` + `CREATE TABLE chunks` + indexes) runs idempotently at app startup. Ingestion (embedding + writing to `chunks`) is a separate pipeline, out of scope here. |
 | **Verify** | `npm test -- --grep "retriever\|pgvector\|null"` (backend port shape, pgvector SQL parameterisation, null fallback, retriever fusion) |
 | **Swap to** | OpenSearch, Qdrant, Pinecone, or a local stub — write a new adapter implementing `RetrievalBackend`, wire it in `src/index.ts` by extending the URL-scheme dispatcher. |
 
@@ -111,7 +111,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **Factory** | `createRateLimiter({redis, userPerHour, workspacePerHour})` |
 | **Auth** | VPC + TLS (`rediss://`), `rejectUnauthorized: true`. No API key. |
 | **Env vars** | `REDIS_URL` (the `rediss://` endpoint) |
-| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions the ElastiCache cluster. No manual setup needed. |
+| **Setup** | The landing-zone `tenant-substrate` component provisions the ElastiCache cluster. No manual setup needed. |
 | **Verify** | `npm test -- --grep redis-limiter` (under-limit/blocked/fail-open paths) |
 
 ---
@@ -122,9 +122,9 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 |---|---|
 | **What it does** | At-least-once delivery for audit events (query + revocation). Primary queue → DLQ on failure → `AuditTotalLoss` metric if both fail. The audit-consumer Deployment (`node dist/bin/audit-consumer.js`, KEDA-scaled 0..5 replicas on SQS queue depth) drains the queue into DDB (hot, 90d TTL) + S3 (archive, 1yr). |
 | **Port** | `SQSClient` (AWS SDK v3) via `createAuditLogger({sqs, queueUrl, dlqUrl, …})` |
-| **Auth** | Pod Identity — the pod's `<env>-slack-knowledge-bot-tenant` role has `sqs:SendMessage` (producer) and `sqs:ReceiveMessage`/`DeleteMessage` (consumer) on the specific queue ARNs, via the landing-zone app-access policy. |
+| **Auth** | Pod Identity — the pod's `<env>-slack-knowledge-bot-tenant` role has `sqs:SendMessage` (producer) and `sqs:ReceiveMessage`/`DeleteMessage` (consumer) on the specific queue ARNs, via the operator-generated datastore-access policy. |
 | **Env vars** | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` |
-| **Setup** | The landing-zone `slack-knowledge-bot-platform` component provisions the queues + DLQ; the chart runs the audit-consumer Deployment and its KEDA ScaledObject (`aws-sqs-queue` trigger). No manual setup. |
+| **Setup** | The landing-zone `tenant-substrate` component provisions the queues + DLQ; the chart runs the audit-consumer Deployment and its KEDA ScaledObject (`aws-sqs-queue` trigger). No manual setup. |
 | **Verify** | `npm test -- --grep audit-logger` (primary → DLQ → total-loss fallover) |
 
 ---

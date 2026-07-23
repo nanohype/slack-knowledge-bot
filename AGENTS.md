@@ -2,7 +2,7 @@
 
 You're an AI client (or the author of one) about to run this service locally, add a knowledge source, wire a new OAuth provider, or ship it as a Platform tenant. This file gets you running in five minutes. For the wider picture — how this repo fits into the nanohype stack — read the [Platform Reference](../nanohype/docs/platform-reference.md).
 
-> Internal service handle: **slack-knowledge-bot**. The GitHub repo and product name are `slack-knowledge-bot`, but the npm package, OTel `service.name` / `agents.platform`, the `/slack-knowledge-bot` slash command, and the `slack-knowledge-bot/<env>/*` secret prefixes stay `slack-knowledge-bot` — they're coupled to the landing-zone `slack-knowledge-bot-platform` substrate component.
+> Internal service handle: **slack-knowledge-bot**. The GitHub repo and product name are `slack-knowledge-bot`, but the npm package, OTel `service.name` / `agents.platform`, the `/slack-knowledge-bot` slash command, and the `slack-knowledge-bot/<env>/*` secret prefixes stay `slack-knowledge-bot` — they're coupled to the landing-zone `tenant-substrate` substrate component.
 
 ## What this repo gives you
 
@@ -68,12 +68,20 @@ spec:
     allowedModels: # Claude Sonnet 4.6 (answers) + Titan (query embeddings)
       - us.anthropic.claude-sonnet-4-6
       - amazon.titan-embed-text-v2:0
-    extraPolicyArns: [] # filled per env with the landing-zone app-access policy
+    extraPolicyArns: [] # escape hatch; substrate access is operator-generated from spec.datastores
   compliance: { soc2: true }
   isolation: namespace
+  datastores:
+    - { name: main, kind: relational } # Aurora pgvector (RAG)
+    - { name: tokens, kind: keyValue, keyValue: { partitionKey: { name: userId, type: S }, sortKey: { name: provider, type: S } } }
+    - { name: audit, kind: keyValue, keyValue: { partitionKey: { name: userId, type: S }, sortKey: { name: timestamp, type: S } } }
+    - { name: id-cache, kind: keyValue, keyValue: { partitionKey: { name: slackUserId, type: S } } }
+    - { name: cache, kind: cache, cache: { engine: redis } } # rate-limit store
+    - { name: archive, kind: objectStore } # S3 audit archive
+    - { name: events, kind: queue, queue: { fifo: true, maxReceiveCount: 3 } }
 ```
 
-The `Tenant` is cluster-scoped — it is the workplace team as an organizational boundary, and `Platform.spec.tenant` references it by name. The `BudgetPolicy` and `Platform` live in `tenants-workplace`, the workplace team's CR-home namespace. The operator derives everything else from `Platform.metadata.name`: it provisions the workload namespace `tenants-slack-knowledge-bot`, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the `slack-knowledge-bot` ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. App pods and AgentFleet pods share that one role — the chart's SA binds to it through the Pod Identity association landing-zone creates, and the app's substrate grants reach it as an `extraPolicyArns` entry filled per environment at apply time.
+The `Tenant` is cluster-scoped — it is the workplace team as an organizational boundary, and `Platform.spec.tenant` references it by name. The `BudgetPolicy` and `Platform` live in `tenants-workplace`, the workplace team's CR-home namespace. The operator derives everything else from `Platform.metadata.name`: it provisions the workload namespace `tenants-slack-knowledge-bot`, its ResourceQuota, LimitRange, default-deny NetworkPolicy, the `slack-knowledge-bot` ArgoCD AppProject, and the `<env>-slack-knowledge-bot-tenant` IAM role. App pods and AgentFleet pods share that one role — they run as the operator-owned `tenant-runtime` ServiceAccount, which the operator binds to the role through a Pod Identity association, and the app's substrate grants are the operator-generated datastore-access policy from `spec.datastores`.
 
 ### The Helm chart (`chart/`)
 
@@ -143,4 +151,4 @@ OAuth providers live in the in-repo `packages/oauth` package (the `slack-knowled
 - [`docs/`](docs/) — PRD, RAG architecture, QA playbook, threat model, compliance checklist, runbook, integrations, secrets, onboarding, test plan
 - [Platform Reference](../nanohype/docs/platform-reference.md) — the stack-wide view
 - [`eks-agent-platform`](https://github.com/nanohype/eks-agent-platform) — the operator that reconciles the Platform CR
-- [`landing-zone`](https://github.com/nanohype/landing-zone) — the `slack-knowledge-bot-platform` substrate: the data stores, the app-access policy, and the Pod Identity association that binds the chart's ServiceAccount to the tenant role
+- [`landing-zone`](https://github.com/nanohype/landing-zone) — the generic `tenant-substrate` component that provisions the declared data stores, plus `agent-iam` for the operator IAM (the tenant role, its datastore-access policy, and the Pod Identity association)
