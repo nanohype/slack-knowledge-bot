@@ -25,21 +25,21 @@
 #     Pod Identity associations (`tenant-runtime` by the operator, the app
 #     SA by landing-zone)
 #
-# What slack-knowledge-bot's chart owns separately (NOT operator-reconciled):
-#   - The chart's own ServiceAccount (`slack-knowledge-bot`) — used by both the main pod
-#     and the audit-consumer Deployment. It is bound to the operator-reconciled
-#     `<env>-slack-knowledge-bot-tenant` role by an EKS Pod Identity association the
-#     landing-zone slack-knowledge-bot-platform component creates — no role-arn
-#     annotation. App pods and AgentFleet pods (`tenant-runtime` SA) share that
-#     role: one Platform, one privilege domain. Bedrock access on the role is
-#     the agent-iam baseline clamped to spec.identity below; the app's
-#     substrate grants arrive via spec.identity.extraPolicyArns.
+# Pod identity: the operator creates and owns the `tenant-runtime` ServiceAccount
+# (shared by the main pod + the audit-consumer Deployment) and binds it to the
+# `<env>-slack-knowledge-bot-tenant` role via an EKS Pod Identity association — no
+# role-arn annotation. App pods and AgentFleet pods run as it: one Platform, one
+# privilege domain. Bedrock access is the agent-iam baseline clamped to
+# spec.identity below; substrate access is the datastore-access policy the
+# operator generates from spec.datastores.
 #
-# Tenant-shared infra (KMS, DDB, SQS, S3, Aurora pgvector, ElastiCache
-# Redis, Secrets Manager seeding, the app-access managed policy) — see
-# landing-zone's components/aws/slack-knowledge-bot-platform/. Once that
-# component's per-env entry applies, the outputs are wired into the chart's
-# per-env values (`tenantInfra.*`).
+# Tenant substrate is declared, not a component: spec.datastores below names the
+# Aurora pgvector store, the three DynamoDB tables, the Valkey/Redis cache, the
+# S3 audit archive, and the FIFO audit queue; the generic tenant-substrate module
+# provisions them and their names/endpoints wire into the chart's per-env values
+# (`tenantInfra.*`). The dedicated KMS key for per-user OAuth token envelope
+# encryption is app-specific substrate outside the datastore vocabulary — a
+# deferred follow-up (tracked like the SES verified-identity case).
 
 ---
 # The workplace team — internal employee-facing tooling: the Slack surfaces
@@ -98,13 +98,45 @@ spec:
     allowedModels:
       - us.anthropic.claude-sonnet-4-6 # BEDROCK_LLM_MODEL_ID — answer generation
       - amazon.titan-embed-text-v2:0 # BEDROCK_EMBEDDING_MODEL_ID — query embeddings
-    # The app's substrate grants (DDB, SQS, S3, KMS, Secrets Manager,
-    # CloudWatch) — landing-zone's slack-knowledge-bot-platform component
-    # emits the policy as `app_access_policy_arn`. Account-scoped, so it is
-    # filled per environment at apply time (landing-zone
-    # docs/first-deploy-aws.md, App platform tenants):
-    #   arn:aws:iam::<account>:policy/eks-agent-platform/slack-knowledge-bot-<env>-app-access
+    # Escape hatch for grants outside the datastore vocabulary. DDB/SQS/S3
+    # access rides spec.datastores; the dedicated KMS token-store key grant is a
+    # deferred follow-up (app-specific substrate, not a datastore kind).
     extraPolicyArns: []
   compliance:
     soc2: true
   isolation: namespace
+  # Stateful substrate: the Aurora pgvector store (RAG), three DynamoDB tables
+  # (per-user OAuth tokens, the audit ledger, the Slack-user identity cache), the
+  # Valkey/Redis rate-limit cache, the S3 audit archive, and the FIFO audit queue
+  # (with a dead-letter queue). The tenant-substrate module provisions them and
+  # the operator generates the scoped datastore-access policy; deletionPolicy
+  # defaults to Retain. Names are short so <platform>+<name> stays within the
+  # CRD's 28-char budget.
+  datastores:
+    - name: main
+      kind: relational
+    - name: tokens
+      kind: keyValue
+      keyValue:
+        partitionKey: { name: userId, type: S }
+        sortKey: { name: provider, type: S }
+        ttlAttribute: ttl
+    - name: audit
+      kind: keyValue
+      keyValue:
+        partitionKey: { name: userId, type: S }
+        sortKey: { name: timestamp, type: S }
+        ttlAttribute: ttl
+    - name: id-cache
+      kind: keyValue
+      keyValue:
+        partitionKey: { name: slackUserId, type: S }
+        ttlAttribute: ttl
+    - name: cache
+      kind: cache
+      cache: { engine: redis }
+    - name: archive
+      kind: objectStore
+    - name: events
+      kind: queue
+      queue: { fifo: true, maxReceiveCount: 3 }

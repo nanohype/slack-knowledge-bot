@@ -43,16 +43,15 @@ npm ci && npm run build:oauth
 
 ### 2a. Substrate (landing-zone)
 
-`landing-zone/components/aws/slack-knowledge-bot-platform/` provisions the shared AWS state: DynamoDB ×3 (tokens, audit, identity cache), SQS + DLQ, the S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, the KMS token key, and the seeded `slack-knowledge-bot/staging/app-secrets`. Apply its staging entry per that repo's `CLAUDE.md`, then grab the outputs you'll plumb into the chart:
+`landing-zone/components/aws/tenant-substrate/` provisions the shared AWS state: DynamoDB ×3 (tokens, audit, identity cache), SQS + DLQ, the S3 audit bucket, Aurora Serverless v2 (pgvector), ElastiCache Redis, and the seeded `slack-knowledge-bot/staging/app-secrets`. Apply its staging entry per that repo's `CLAUDE.md`, then grab the outputs you'll plumb into the chart:
 
 ```bash
-# from landing-zone, in the component's terragrunt dir
-terragrunt output tenant_role_arn         # the IAM role (bound by the Pod Identity association — not a chart value)
-terragrunt output app_access_policy_arn   # → Platform.spec.identity.extraPolicyArns
+# from landing-zone, in the tenant-substrate terragrunt dir — the datastore endpoints/names
 terragrunt output aurora_cluster_endpoint # → tenantInfra.pgHost
+# (table names, queue URL, bucket name come from the same tenant-substrate outputs)
 ```
 
-These outputs are wired into `chart/values-staging.yaml` under `tenantInfra.*` (the IAM role is bound by the Pod Identity association). See `docs/secrets.md` for the secret payload shape.
+There is no `app_access_policy_arn` to grab and nothing to set in `spec.identity.extraPolicyArns`: once the Platform CR is `Ready`, the operator generates the datastore-access policy and binds the `tenant-runtime` ServiceAccount to the tenant role via a Pod Identity association. The datastore outputs are wired into `chart/values-staging.yaml` under `tenantInfra.*`. See `docs/secrets.md` for the secret payload shape.
 
 ### 2b. Platform CR
 
@@ -230,7 +229,7 @@ All three need the same callback URL pattern:
 
 ## 7. Seed app-secrets (2 min)
 
-The landing-zone `slack-knowledge-bot-platform` component seeds `slack-knowledge-bot/staging/app-secrets` with placeholder values. Now overwrite it with real values. **Do not include `STATE_SIGNING_SECRET`** — the substrate generates that one; reseeding would rotate it and break any in-flight OAuth state cookies.
+The landing-zone `tenant-substrate` component seeds `slack-knowledge-bot/staging/app-secrets` with placeholder values. Now overwrite it with real values. **Do not include `STATE_SIGNING_SECRET`** — the substrate generates that one; reseeding would rotate it and break any in-flight OAuth state cookies.
 
 Write the JSON off-tree:
 

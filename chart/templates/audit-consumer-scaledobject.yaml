@@ -4,7 +4,7 @@
 # role (podIdentity: aws), so no separate credentials secret is needed.
 #
 # Required IAM permission for the IAM role: sqs:GetQueueAttributes on the
-# audit queue ARN. The landing-zone app-access policy includes this alongside
+# audit queue ARN. The the operator-generated datastore-access policy includes this alongside
 # ReceiveMessage / DeleteMessage / SendMessage.
 #
 # Set `keda.enabled: false` to disable KEDA scaling and manage replicas

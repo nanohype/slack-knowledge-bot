@@ -30,7 +30,7 @@ The chart alone is not enough to run the app. Two sibling files at the repo root
 
 ## Required landing-zone components
 
-Single-tenant component `components/aws/slack-knowledge-bot-platform/` provisions everything the app's pods need:
+Single-tenant component `components/aws/tenant-substrate/` provisions everything the app's pods need:
 
 - KMS key (per-user OAuth token envelope, annual rotation)
 - DynamoDB ×3 — tokens / audit / identity-cache (all with TTL)
@@ -38,7 +38,7 @@ Single-tenant component `components/aws/slack-knowledge-bot-platform/` provision
 - S3 audit-archive bucket
 - Aurora Serverless v2 (postgres 16.6, pgvector at app-bootstrap)
 - ElastiCache Redis replication group (multi-AZ-gated)
-- IAM role with the consolidated inline policy (DDB rw, SQS rw, S3 PutObject, KMS Encrypt/Decrypt on the token-store key, Bedrock invoke for Claude Sonnet 4.6 + Titan embed v2, Secrets Manager read)
+- The tenant IAM role is operator-generated, not part of this substrate: the datastore-access policy (DDB rw, SQS rw, S3 PutObject) from `spec.datastores`, the agent-iam Bedrock baseline clamped to `spec.identity.allowedModels`, and the tenant's own Secrets Manager prefix. KMS Encrypt/Decrypt on the token-store key is a deferred follow-up (app-specific substrate outside the datastore vocabulary).
 
 Bedrock invocation-logging-NONE is a Bedrock account+region setting owned by landing-zone's `cluster-bootstrap` (or a `bedrock-account-config` component), NOT per-tenant.
 
@@ -46,14 +46,13 @@ Bedrock invocation-logging-NONE is a Bedrock account+region setting owned by lan
 
 One IAM role serves this Platform tenant. The eks-agent-platform operator mints it from the Platform CR; every pod in the tenant binds to it through an EKS Pod Identity association:
 
-| Role                               | Owner                       | Bound service account                                                  | Used by                                             |
-| ---------------------------------- | --------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------- |
-| `<env>-slack-knowledge-bot-tenant` | eks-agent-platform operator | `system:serviceaccount:tenants-slack-knowledge-bot:slack-knowledge-bot` | This chart's main pod + audit-consumer Deployment   |
-| `<env>-slack-knowledge-bot-tenant` | eks-agent-platform operator | `system:serviceaccount:tenants-slack-knowledge-bot:tenant-runtime`      | AgentFleet pods (if/when any land in this Platform) |
+| Role                               | Owner                       | Bound service account                                             | Used by                                                     |
+| ---------------------------------- | --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| `<env>-slack-knowledge-bot-tenant` | eks-agent-platform operator | `system:serviceaccount:tenants-slack-knowledge-bot:tenant-runtime` | The main pod + audit-consumer Deployment, and any AgentFleet pods |
 
-The chart's `serviceaccount.yaml` creates a ServiceAccount named `slack-knowledge-bot` (pinned via `serviceAccount.name`) with no role-arn annotation. The landing-zone `slack-knowledge-bot-platform` component creates the EKS Pod Identity association binding that `(namespace, service-account)` to the tenant role, so EKS injects credentials through the standard AWS credential chain — no annotation, no role ARN in the chart. The ServiceAccount name must match the association's `service_account`, which is why it is pinned to the app name. KEDA's `aws-sqs-queue` trigger on the audit-consumer runs under its configured identity, so queue-depth scaling Just Works.
+The chart's `serviceaccount.yaml` references the operator-owned `tenant-runtime` ServiceAccount (`serviceAccount.create: false`) with no role-arn annotation. The operator creates the EKS Pod Identity association binding `(namespace, tenant-runtime)` to the tenant role, so EKS injects credentials through the standard AWS credential chain — no annotation, no role ARN in the chart. The ServiceAccount name must match the association's `service_account`, which is why it is pinned to the app name. KEDA's `aws-sqs-queue` trigger on the audit-consumer runs under its configured identity, so queue-depth scaling Just Works.
 
-The role's Bedrock grant is the agent-iam baseline clamped to `Platform.spec.identity.allowedModels`. The app's substrate grants (DynamoDB, SQS, S3, KMS, Secrets Manager, CloudWatch) arrive as the landing-zone `app_access_policy_arn` managed policy, attached to the same role via `Platform.spec.identity.extraPolicyArns`. One Platform, one privilege domain.
+The role's Bedrock grant is the agent-iam baseline clamped to `Platform.spec.identity.allowedModels`. The app's substrate grants (DynamoDB, SQS, S3, KMS, Secrets Manager, CloudWatch) arrive as the operator-generated datastore-access policy (from spec.datastores). One Platform, one privilege domain.
 
 ## Render locally
 
@@ -66,7 +65,7 @@ helm lint chart
 
 This chart owns the app's k8s surface. The cloud substrate and cluster addons sit in other layers:
 
-**Substrate (`landing-zone/components/aws/slack-knowledge-bot-platform/`):** VPC + private subnets, DynamoDB ×3, ElastiCache Redis, Aurora Serverless v2 (pgvector), SQS + DLQ, S3 audit bucket, KMS token-store key, and the seeded Secrets Manager `slack-knowledge-bot/<env>/app-secrets`. It binds the role to the chart's ServiceAccount via an EKS Pod Identity association. AWS Secrets Manager stays the source of truth; the chart's `externalsecret.yaml` syncs it into a k8s Secret via ESO.
+**Substrate (declared in `spec.datastores`, provisioned by `landing-zone/components/aws/tenant-substrate/`):** the `main` Aurora Serverless v2 (pgvector) store, three DynamoDB tables, the Redis `cache`, the FIFO audit queue + DLQ, and the S3 audit bucket. The operator generates the datastore-access policy and binds the operator-owned `tenant-runtime` ServiceAccount to the tenant role via a Pod Identity association. App secrets at `slack-knowledge-bot/<env>/app-secrets` are seeded out of band; `externalsecret.yaml` syncs them into a k8s Secret via ESO. The dedicated KMS token-envelope key is a deferred follow-up.
 
 **Cluster addons (`eks-gitops`):** the AWS Load Balancer Controller + external-dns (which the `ingress` template depends on), cert-manager, the Grafana Alloy OTLP receiver at `alloy.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to Alloy, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
 

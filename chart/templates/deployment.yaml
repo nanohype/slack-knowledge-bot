@@ -48,7 +48,7 @@ spec:
               value: {{ $v | quote }}
             {{- end }}
             # Per-tenant infra references — fed by per-env Helm values from
-            # the landing-zone slack-knowledge-bot-platform component's outputs. Empty
+            # the landing-zone tenant-substrate component's outputs. Empty
             # base values are a local-dev fallback.
             - name: DYNAMODB_TABLE_TOKENS
               value: {{ .Values.tenantInfra.dynamodbTableTokens | quote }}

@@ -69,17 +69,16 @@ This repo owns the application — source, chart, Platform CR, gitops entry. Eve
 
 ### Substrate → `landing-zone`
 
-`landing-zone/components/aws/slack-knowledge-bot-platform/` provisions the per-tenant AWS data plane and does not move here:
+`landing-zone/components/aws/tenant-substrate/` provisions the per-tenant AWS data plane and does not move here:
 
 - 3 DynamoDB tables (token store, identity cache, audit log)
 - Aurora Serverless v2 with pgvector (the retrieval backend)
 - ElastiCache Redis (the rate limiter)
 - SQS queue + DLQ (the audit pipeline)
 - S3 audit bucket
-- KMS token key
-- Secrets Manager seeding (`slack-knowledge-bot/<env>/*`)
+- Secrets Manager seeding (`slack-knowledge-bot/<env>/*`), seeded out of band
 
-Its IAM role is the role slack-knowledge-bot's app pods assume, bound to the chart's ServiceAccount by an EKS Pod Identity association. The chart contains **no inline IAM**; the role and the association are owned in landing-zone and consumed by reference.
+All declared in `spec.datastores`. The dedicated KMS key for per-user OAuth token envelope encryption is app-specific substrate outside the datastore vocabulary — a deferred follow-up. The tenant IAM role is operator-generated: the app pods run as the operator-owned `tenant-runtime` ServiceAccount, bound to the role by a Pod Identity association the operator creates. The chart contains **no inline IAM**; the role and the association are operator-owned and consumed by reference.
 
 ### Cluster addons → `eks-gitops`
 

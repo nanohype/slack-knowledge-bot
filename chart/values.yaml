@@ -13,12 +13,13 @@ service:
   targetPort: 3001
 
 serviceAccount:
-  create: true
-  # Pinned to the app name so it matches the service_account of the EKS Pod
-  # Identity association landing-zone's slack-knowledge-bot-platform component
-  # creates — that association binds this ServiceAccount to its IAM role, so the
-  # pod needs no role-arn annotation and the chart carries no AWS account values.
-  name: slack-knowledge-bot
+  # The operator creates and owns the `tenant-runtime` ServiceAccount and binds
+  # it to the `<env>-slack-knowledge-bot-tenant` role via an EKS Pod Identity
+  # association, so the pod runs as it with no role-arn annotation and the chart
+  # carries no AWS account values. The chart references that SA rather than
+  # minting its own.
+  create: false
+  name: tenant-runtime
   # Free-form additional annotations to merge into the ServiceAccount.
   annotations: {}
 
@@ -273,26 +274,26 @@ env:
   OTEL_RESOURCE_ATTRIBUTES: 'service.namespace=slack-knowledge-bot,service.version=0.1.0,agents.tenant=workplace,agents.platform=slack-knowledge-bot'
 
 # Per-tenant infrastructure references — populated by per-env values from
-# the landing-zone slack-knowledge-bot-platform component's outputs. Empty at the chart
+# the landing-zone tenant-substrate component's outputs. Empty at the chart
 # level for local dev (where the binaries may use local stubs or kind-side
 # mocks).
 tenantInfra:
-  # DynamoDB tables (3) — slack-knowledge-bot-platform: aws_dynamodb_table.{tokens,audit,identity_cache}.name
+  # DynamoDB tables (3) — tenant-substrate: aws_dynamodb_table.{tokens,audit,identity_cache}.name
   dynamodbTableTokens: ''
   dynamodbTableAudit: ''
   dynamodbTableIdentityCache: ''
-  # SQS audit queue + DLQ — slack-knowledge-bot-platform: aws_sqs_queue.{audit,audit_dlq}.url
+  # SQS audit queue + DLQ — tenant-substrate: aws_sqs_queue.{audit,audit_dlq}.url
   sqsAuditQueueUrl: ''
   sqsAuditDlqUrl: ''
-  # ElastiCache Redis endpoint — slack-knowledge-bot-platform: aws_elasticache_replication_group.this.primary_endpoint_address
+  # ElastiCache Redis endpoint — tenant-substrate: aws_elasticache_replication_group.this.primary_endpoint_address
   redisUrl: ''
-  # KMS key for token envelope encryption — slack-knowledge-bot-platform: aws_kms_key.token_store.id
+  # KMS key for token envelope encryption — tenant-substrate: aws_kms_key.token_store.id
   kmsKeyId: ''
-  # Aurora Serverless v2 (pgvector) endpoint — slack-knowledge-bot-platform: module.aurora.cluster_endpoint
+  # Aurora Serverless v2 (pgvector) endpoint — tenant-substrate: module.aurora.cluster_endpoint
   pgHost: ''
   pgPort: '5432'
   pgDatabase: slack_knowledge_bot
-  # S3 audit-archive bucket — slack-knowledge-bot-platform: aws_s3_bucket.audit.bucket
+  # S3 audit-archive bucket — tenant-substrate: aws_s3_bucket.audit.bucket
   auditBucket: ''
 
 nodeSelector: {}

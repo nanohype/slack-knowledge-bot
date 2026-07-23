@@ -191,7 +191,7 @@ Then: Query 21 (to either replica) is blocked
 ### FINDING-01: IAM Policy Too Broad (HIGH)
 **Finding:** A table-level ReadWrite grant (Scan + full-table access) on the token store exceeds what the pod needs — GetItem/PutItem/DeleteItem.
 
-**Remediation:** Scope the DynamoDB statement in the landing-zone app-access policy (attached to the `<env>-slack-knowledge-bot-tenant` role) to the least-privilege action set:
+**Remediation:** Scope the DynamoDB statement in the operator-generated datastore-access policy (attached to the `<env>-slack-knowledge-bot-tenant` role) to the least-privilege action set:
 ```json
 {
   "Effect": "Allow",
