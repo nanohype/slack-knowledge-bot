@@ -201,10 +201,10 @@ AWS-managed, wired by [`eks-gitops`](https://github.com/nanohype/eks-gitops):
 
 - The app writes structured JSON to stderr → the cluster log forwarder → the
   in-cluster **Loki** (`loki-gateway.monitoring.svc.cluster.local`).
-- OTLP traces + metrics export to `alloy.monitoring.svc.cluster.local:4318` →
-  the cluster's **Grafana Alloy** receiver → the in-cluster **Tempo**
+- OTLP traces + metrics export to `telemetry.monitoring.svc.cluster.local:4318` →
+  the cluster's **OpenTelemetry Collector** gateway → the in-cluster **Tempo**
   (`tempo.monitoring.svc.cluster.local:3200`) for traces, and
-  **Amazon Managed Service for Prometheus (AMP)** for metrics, which Alloy
+  **Amazon Managed Service for Prometheus (AMP)** for metrics, which the gateway
   reaches by SigV4-signed remote-write under its own Pod Identity association.
 - **Amazon Managed Grafana (AMG)** is the query surface. The grafana-operator
   reconciles the `ManagedPrometheus`, `Loki`, `Tempo`, and `CloudWatch` data
@@ -245,8 +245,8 @@ suspecting the cluster forwarder.
 
 The chart's `prometheusrule.yaml` declares the alerts below as a
 `monitoring.coreos.com/v1` `PrometheusRule`. **It is off by default**
-(`prometheusRule.enabled: false`): the standard stack here is Alloy →
-Amazon Managed Prometheus with no in-cluster Prometheus Operator to evaluate
+(`prometheusRule.enabled: false`): the standard stack here is the OpenTelemetry
+Collector → Amazon Managed Prometheus with no in-cluster Prometheus Operator to evaluate
 the rules, so the object would be inert. eks-gitops installs the
 prometheus-operator CRDs, so it applies cleanly wherever you do turn it on —
 set `prometheusRule.enabled: true` on a cluster that runs an operator, and
