@@ -1,7 +1,7 @@
 {{- if .Values.prometheusRule.enabled -}}
 # SLO alerts over the app's own OTel metrics. Series names are the
 # namespace-qualified instruments `src/metrics.ts` emits (timing + counter
-# over @opentelemetry/api); the cluster's Grafana Alloy receiver
+# over @opentelemetry/api); the cluster's OpenTelemetry Collector gateway
 # remote-writes them into Amazon Managed Service for Prometheus, which is
 # what these expressions evaluate against.
 #

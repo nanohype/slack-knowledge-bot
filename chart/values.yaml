@@ -128,7 +128,7 @@ externalSecret:
 prometheusRule:
   # Ships SLO recording rules + burn-rate alerts to a Prometheus Operator
   # (kube-prometheus-stack) via the PrometheusRule CR. Off by default — inert
-  # without an operator, which the managed-Prometheus stack (Alloy + AMP,
+  # without an operator, which the managed-Prometheus stack (OpenTelemetry Collector + AMP,
   # alerts in Amazon Managed Grafana) doesn't run. Set `enabled: true` on a
   # cluster that runs one.
   enabled: false
@@ -233,7 +233,7 @@ networkPolicy:
           port: 5432
         - protocol: TCP
           port: 6379
-    # OTLP traces + metrics + logs to the Alloy OTLP receiver
+    # OTLP traces + metrics + logs to the collector gateway OTLP receiver
     - to:
         - namespaceSelector:
             matchLabels:
@@ -260,12 +260,12 @@ env:
   STALE_DOC_THRESHOLD_DAYS: '90'
   TOKEN_STORE_ENCRYPTION_CONTEXT: slack-knowledge-bot-token-store
   NODE_ENV: production
-  # OTel — exports to the Grafana Alloy OTLP receiver in the monitoring
-  # namespace provisioned by eks-gitops. The Alloy release is named `alloy`, so
-  # the Service is `alloy.monitoring.svc.cluster.local`, exposing otlp-grpc on
+  # OTel — exports to the OpenTelemetry Collector gateway in the monitoring
+  # namespace provisioned by eks-gitops. The gateway release is named `otel-gateway`, so
+  # the Service is `telemetry.monitoring.svc.cluster.local`, exposing otlp-grpc on
   # 4317 and otlp-http on 4318. No per-pod sidecar.
   OTEL_SERVICE_NAME: slack-knowledge-bot
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy.monitoring.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://telemetry.monitoring.svc.cluster.local:4318
   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
   OTEL_TRACES_SAMPLER: always_on
   OTEL_METRICS_EXPORTER: otlp

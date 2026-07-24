@@ -22,7 +22,7 @@
 | Control | Implementation | Evidence |
 |---------|---------------|----------|
 | CC7.1 — Vulnerability detection | image scan (trivy); GitHub Dependabot/Renovate; npm audit CI step | CI pipeline |
-| CC7.2 — Monitoring anomalies | **Partially operating.** Telemetry is collected: the app exports OTLP to Grafana Alloy, which remote-writes metrics to Amazon Managed Prometheus and ships traces to Tempo and logs to Loki; the ops dashboard is reconciled onto Amazon Managed Grafana. Nothing evaluates the anomaly expressions — see gap G-01. Detection is a human reading the dashboard or running PromQL. | `grafana-dashboard.yaml`; AMP/AMG query history. `prometheusrule.yaml` is **not** evidence — it ships disabled |
+| CC7.2 — Monitoring anomalies | **Partially operating.** Telemetry is collected: the app exports OTLP to the OpenTelemetry Collector, which remote-writes metrics to Amazon Managed Prometheus and ships traces to Tempo and logs to Loki; the ops dashboard is reconciled onto Amazon Managed Grafana. Nothing evaluates the anomaly expressions — see gap G-01. Detection is a human reading the dashboard or running PromQL. | `grafana-dashboard.yaml`; AMP/AMG query history. `prometheusrule.yaml` is **not** evidence — it ships disabled |
 | CC7.3 — Incident response | **Partially operating.** `docs/runbook.md` documents triage, escalation, and recovery per scenario, and is exercised by hand. There is no automated trigger: nothing pages, and nothing posts to a Slack channel — see gap G-01. | `docs/runbook.md` |
 
 ### CC9 — Risk Mitigation
@@ -48,7 +48,7 @@ Recorded here so no one attests to a control by reading past its absence.
 
 The cluster observability stack in
 [`eks-gitops/addons/observability/`](https://github.com/nanohype/eks-gitops/tree/main/addons/observability)
-is Grafana Alloy (OTLP in on 4317/4318, `otelcol.exporter.prometheus` →
+is the OpenTelemetry Collector (OTLP in on 4317/4318, `otelcol.exporter.prometheus` →
 `prometheus.remote_write` to Amazon Managed Prometheus over SigV4, traces to
 Tempo, logs to Loki), plus kube-state-metrics, OpenCost, and the Grafana
 operator. `addons/bootstrap/` installs `prometheus-operator-crds` — the CRDs

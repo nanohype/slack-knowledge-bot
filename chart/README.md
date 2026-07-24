@@ -17,7 +17,7 @@ Helm chart for slack-knowledge-bot (internal service handle: `slack-knowledge-bo
   - `networkpolicy.yaml` — default-deny + egress allow-list
   - `audit-consumer-deployment.yaml` — long-running SQS consumer (`dist/bin/audit-consumer.js`); drains the audit queue → DynamoDB + S3
   - `audit-consumer-scaledobject.yaml` — KEDA `aws-sqs-queue` trigger scaling the audit-consumer 0..5 replicas off the queue depth, using the pod's IAM identity for SQS metrics
-  - `prometheusrule.yaml` — QueryP95, LLMError, AuditTotalLoss, plus AuditDlqDepth behind `auditDlq.cloudwatchExporterEnabled`. Rendered only when `prometheusRule.enabled` is true — off by default, since the default stack (Alloy → Amazon Managed Prometheus) runs no in-cluster Prometheus Operator to evaluate the rules
+  - `prometheusrule.yaml` — QueryP95, LLMError, AuditTotalLoss, plus AuditDlqDepth behind `auditDlq.cloudwatchExporterEnabled`. Rendered only when `prometheusRule.enabled` is true — off by default, since the default stack (OpenTelemetry Collector → Amazon Managed Prometheus) runs no in-cluster Prometheus Operator to evaluate the rules
   - `grafana-dashboard.yaml` — GrafanaDashboard CR (instanceSelector `dashboards: external`) loading the dashboard from `dashboards/slack-knowledge-bot.json`, reconciled by the grafana-operator onto Amazon Managed Grafana
   - `_helpers.tpl` — name/label helpers
 
@@ -67,7 +67,7 @@ This chart owns the app's k8s surface. The cloud substrate and cluster addons si
 
 **Substrate (declared in `spec.datastores`, provisioned by `landing-zone/components/aws/tenant-substrate/`):** the `main` Aurora Serverless v2 (pgvector) store, three DynamoDB tables, the Redis `cache`, the FIFO audit queue + DLQ, and the S3 audit bucket. The operator generates the datastore-access policy and binds the operator-owned `tenant-runtime` ServiceAccount to the tenant role via a Pod Identity association. App secrets at `slack-knowledge-bot/<env>/app-secrets` are seeded out of band; `externalsecret.yaml` syncs them into a k8s Secret via ESO. The dedicated KMS token-envelope key is a deferred follow-up.
 
-**Cluster addons (`eks-gitops`):** the AWS Load Balancer Controller + external-dns (which the `ingress` template depends on), cert-manager, the Grafana Alloy OTLP receiver at `alloy.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to Alloy, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
+**Cluster addons (`eks-gitops`):** the AWS Load Balancer Controller + external-dns (which the `ingress` template depends on), cert-manager, the OpenTelemetry Collector gateway at `telemetry.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to the collector gateway, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
 
 **This chart:** the main `Deployment`, the KEDA-scaled `audit-consumer-deployment.yaml` (`dist/bin/audit-consumer.js`, 0..5 replicas off SQS audit queue depth — consumer logic in `src/audit/audit-consumer.ts`, port-injected so unit tests fake the SDKs), the `ingress`, the default-deny `networkpolicy.yaml`, the `externalsecret.yaml`, plus observability that ships here rather than in eks-gitops:
 
