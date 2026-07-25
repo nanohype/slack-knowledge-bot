@@ -67,9 +67,7 @@
     "esbuild": "^0.28.1",
     "axios": "^1.18.1",
     "body-parser": "^2.3.0",
-    "glob": {
-      "brace-expansion": "^2.1.2"
-    }
+    "gaxios": "^7.3.0"
   },
   "engines": {
     "node": ">=24"
