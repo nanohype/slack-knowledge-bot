@@ -41,7 +41,9 @@ const ConfigSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
   PG_SSL_CA_PATH: z.string().default("certs/rds-global-bundle.pem"),
-  KMS_KEY_ID: z.string(),
+  // .min(1), not a bare string: an empty value passes a bare z.string() and the
+  // pod starts, then fails on the first envelope operation instead of at boot.
+  KMS_KEY_ID: z.string().min(1),
   REDIS_URL: z.string(),
 
   // Bedrock

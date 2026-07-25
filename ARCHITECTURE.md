@@ -78,7 +78,7 @@ This repo owns the application — source, chart, Platform CR, gitops entry. Eve
 - S3 audit bucket
 - Secrets Manager seeding (`slack-knowledge-bot/<env>/*`), seeded out of band
 
-All declared in `spec.datastores`. The dedicated KMS key for per-user OAuth token envelope encryption is app-specific substrate outside the datastore vocabulary — a deferred follow-up. The tenant IAM role is operator-generated: the app pods run as the operator-owned `tenant-runtime` ServiceAccount, bound to the role by a Pod Identity association the operator creates. The chart contains **no inline IAM**; the role and the association are operator-owned and consumed by reference.
+All declared in `spec.datastores`. The key for per-user OAuth token envelope encryption is not declared here: `tenant-substrate` mints one customer-managed key per tenant unconditionally, and the operator grants GenerateDataKey/Decrypt/DescribeKey on it through the `tenant-key-access` policy. Envelope encryption is independent of the datastore vocabulary, so the key exists whether or not a tenant declares a store. The tenant IAM role is operator-generated: the app pods run as the operator-owned `tenant-runtime` ServiceAccount, bound to the role by a Pod Identity association the operator creates. The chart contains **no inline IAM**; the role and the association are operator-owned and consumed by reference.
 
 ### Cluster addons → `eks-gitops`
 

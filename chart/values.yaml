@@ -287,7 +287,9 @@ tenantInfra:
   sqsAuditDlqUrl: ''
   # ElastiCache Redis endpoint — tenant-substrate: aws_elasticache_replication_group.this.primary_endpoint_address
   redisUrl: ''
-  # KMS key for token envelope encryption — tenant-substrate: aws_kms_key.token_store.id
+  # KMS key for token envelope encryption — tenant-substrate: aws_kms_key.tenant.arn
+  # (one customer-managed key per tenant; the operator grants GenerateDataKey,
+  # Decrypt and DescribeKey on exactly this ARN via the tenant-key-access policy)
   kmsKeyId: ''
   # Aurora Serverless v2 (pgvector) endpoint — tenant-substrate: module.aurora.cluster_endpoint
   pgHost: ''
