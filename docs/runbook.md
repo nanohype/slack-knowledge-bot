@@ -85,7 +85,7 @@ The infrastructure splits across three layers:
 
 # 3. Platform CR — apply once during initial setup, then wait for Ready.
 kubectl apply -f platform.yaml
-kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
+kubectl wait --for=jsonpath='{.status.phase}'=Ready platform/slack-knowledge-bot \
   -n tenants-workplace --timeout=300s
 
 # 4. GitOps — register gitops/applicationset-entry.yaml into nanohype/eks-gitops

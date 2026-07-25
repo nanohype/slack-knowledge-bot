@@ -59,7 +59,7 @@ Apply the Platform CR once. It lands in `tenants-workplace`, the team's CR-home 
 
 ```bash
 kubectl apply -f platform.yaml
-kubectl wait --for=condition=Ready platform/slack-knowledge-bot \
+kubectl wait --for=jsonpath='{.status.phase}'=Ready platform/slack-knowledge-bot \
   -n tenants-workplace --timeout=300s
 ```
 
