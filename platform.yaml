@@ -37,9 +37,12 @@
 # Aurora pgvector store, the three DynamoDB tables, the Valkey/Redis cache, the
 # S3 audit archive, and the FIFO audit queue; the generic tenant-substrate module
 # provisions them and their names/endpoints wire into the chart's per-env values
-# (`tenantInfra.*`). The dedicated KMS key for per-user OAuth token envelope
-# encryption is app-specific substrate outside the datastore vocabulary — a
-# deferred follow-up (tracked like the SES verified-identity case).
+# (`tenantInfra.*`). The key for per-user OAuth token envelope encryption is not
+# among them and needs no declaration: tenant-substrate mints one
+# customer-managed key per tenant unconditionally, and the operator grants use of
+# it through the tenant-key-access policy. Envelope encryption is independent of
+# the datastore vocabulary, so the key exists whether or not any store is
+# declared.
 
 ---
 # The workplace team — internal employee-facing tooling: the Slack surfaces
@@ -98,9 +101,10 @@ spec:
     allowedModels:
       - us.anthropic.claude-sonnet-4-6 # BEDROCK_LLM_MODEL_ID — answer generation
       - amazon.titan-embed-text-v2:0 # BEDROCK_EMBEDDING_MODEL_ID — query embeddings
-    # Escape hatch for grants outside the datastore vocabulary. DDB/SQS/S3
-    # access rides spec.datastores; the dedicated KMS token-store key grant is a
-    # deferred follow-up (app-specific substrate, not a datastore kind).
+    # Escape hatch for grants outside the datastore vocabulary. Nothing needs it:
+    # DDB/SQS/S3 access rides spec.datastores, and the KMS token-store key is
+    # granted by the operator from the per-tenant key tenant-substrate mints — no
+    # hand-written policy, which is the point of the vocabulary.
     extraPolicyArns: []
     # No directSecretReads: every secret this Platform needs is projected into
     # the pod by the chart's ExternalSecret (read by the External Secrets

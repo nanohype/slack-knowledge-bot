@@ -38,7 +38,7 @@ Single-tenant component `components/aws/tenant-substrate/` provisions everything
 - S3 audit-archive bucket
 - Aurora Serverless v2 (postgres 16.6, pgvector at app-bootstrap)
 - ElastiCache Redis replication group (multi-AZ-gated)
-- The tenant IAM role is operator-generated, not part of this substrate: the datastore-access policy (DDB rw, SQS rw, S3 PutObject) from `spec.datastores`, the agent-iam Bedrock baseline clamped to `spec.identity.allowedModels`, and the tenant's own Secrets Manager prefix. KMS Encrypt/Decrypt on the token-store key is a deferred follow-up (app-specific substrate outside the datastore vocabulary).
+- The tenant IAM role is operator-generated, not part of this substrate: the datastore-access policy (DDB rw, SQS rw, S3 PutObject) from `spec.datastores`, the agent-iam Bedrock baseline clamped to `spec.identity.allowedModels`, and the tenant's own Secrets Manager prefix. KMS on the token-store key arrives as the operator-generated `tenant-key-access` policy: `tenant-substrate` mints one customer-managed key per tenant and publishes its ARN, and the operator grants GenerateDataKey/Decrypt/DescribeKey scoped to exactly that ARN. The key is minted for every tenant regardless of declared datastores, because envelope encryption is independent of the datastore vocabulary.
 
 Bedrock invocation-logging-NONE is a Bedrock account+region setting owned by landing-zone's `cluster-bootstrap` (or a `bedrock-account-config` component), NOT per-tenant.
 
@@ -52,7 +52,7 @@ One IAM role serves this Platform tenant. The eks-agent-platform operator mints 
 
 The chart's `serviceaccount.yaml` references the operator-owned `tenant-runtime` ServiceAccount (`serviceAccount.create: false`) with no role-arn annotation. The operator creates the EKS Pod Identity association binding `(namespace, tenant-runtime)` to the tenant role, so EKS injects credentials through the standard AWS credential chain — no annotation, no role ARN in the chart. The ServiceAccount name must match the association's `service_account`, which is why it is pinned to the app name. KEDA's `aws-sqs-queue` trigger on the audit-consumer runs under its configured identity, so queue-depth scaling Just Works.
 
-The role's Bedrock grant is the agent-iam baseline clamped to `Platform.spec.identity.allowedModels`. The app's substrate grants (DynamoDB, SQS, S3, KMS, Secrets Manager, CloudWatch) arrive as the operator-generated datastore-access policy (from spec.datastores). One Platform, one privilege domain.
+The role's Bedrock grant is the agent-iam baseline clamped to `Platform.spec.identity.allowedModels`. The app's substrate grants arrive from three operator-generated policies, not one: `datastore-access` (DynamoDB, SQS, S3, and read on the RDS-managed master secret) from `spec.datastores`; `tenant-key-access` (KMS on the tenant's own key), which is minted per tenant and is not datastore-derived; and `tenant-secrets` (Secrets Manager) from `spec.identity.directSecretReads`. CloudWatch and log writes come from the agent-iam baseline, not from any of the three. One Platform, one privilege domain — but naming the wrong policy sends an auditor to a file that does not contain the grant.
 
 ## Render locally
 
@@ -65,7 +65,7 @@ helm lint chart
 
 This chart owns the app's k8s surface. The cloud substrate and cluster addons sit in other layers:
 
-**Substrate (declared in `spec.datastores`, provisioned by `landing-zone/components/aws/tenant-substrate/`):** the `main` Aurora Serverless v2 (pgvector) store, three DynamoDB tables, the Redis `cache`, the FIFO audit queue + DLQ, and the S3 audit bucket. The operator generates the datastore-access policy and binds the operator-owned `tenant-runtime` ServiceAccount to the tenant role via a Pod Identity association. App secrets at `slack-knowledge-bot/<env>/app-secrets` are seeded out of band; `externalsecret.yaml` syncs them into a k8s Secret via ESO. The dedicated KMS token-envelope key is a deferred follow-up.
+**Substrate (declared in `spec.datastores`, provisioned by `landing-zone/components/aws/tenant-substrate/`):** the `main` Aurora Serverless v2 (pgvector) store, three DynamoDB tables, the Redis `cache`, the FIFO audit queue + DLQ, and the S3 audit bucket. The operator generates the datastore-access policy and binds the operator-owned `tenant-runtime` ServiceAccount to the tenant role via a Pod Identity association. App secrets at `slack-knowledge-bot/<env>/app-secrets` are seeded out of band; `externalsecret.yaml` syncs them into a k8s Secret via ESO. The KMS token-envelope key is minted per tenant by the same component and granted by the operator through `tenant-key-access` — not declared in `spec.datastores`, because envelope encryption is not a datastore.
 
 **Cluster addons (`eks-gitops`):** the AWS Load Balancer Controller + external-dns (which the `ingress` template depends on), cert-manager, the OpenTelemetry Collector gateway at `telemetry.monitoring.svc.cluster.local:4318` and the grafana-operator (→ Amazon Managed Grafana). The app writes structured JSON to stderr (tailed to Loki) and exports OTLP traces + metrics + logs to the collector gateway, which forwards traces → Tempo, metrics → Amazon Managed Prometheus, logs → Loki. No per-pod sidecars.
 
