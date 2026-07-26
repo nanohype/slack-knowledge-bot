@@ -30,6 +30,7 @@ import {
   type ReceiveMessageCommandOutput,
   type SQSClient,
 } from "@aws-sdk/client-sqs";
+import { errorMessage } from "../errors.js";
 
 const RE_USER_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const RE_ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,7 +77,13 @@ function validateEvent(raw: unknown): ValidEvent | null {
   const userId = typeof obj.userId === "string" ? obj.userId : "";
   const timestamp = typeof obj.timestamp === "string" ? obj.timestamp : "";
   const queryHash = typeof obj.queryHash === "string" ? obj.queryHash : "";
-  const datePart = timestamp.split("T")[0] ?? "";
+  // slice, not split("T")[0], because String.split never returns an empty array
+  // — the `?? ""` that shape needs is a branch no input can take, and an
+  // untakeable branch on the validation path is indistinguishable from an
+  // untested one. RE_ISO_DATE is anchored to exactly 10 characters, so a
+  // timestamp shorter than that, or one whose 11th character is not the
+  // separator, fails here the same way it did before.
+  const datePart = timestamp.slice(0, 10);
   if (!RE_USER_ID.test(userId)) return null;
   if (!RE_ISO_DATE.test(datePart)) return null;
   if (!RE_QUERY_HASH.test(queryHash)) return null;
@@ -193,7 +200,7 @@ export async function runAuditConsumer(deps: AuditConsumerDeps): Promise<void> {
           // configuration, SQS moves it to the DLQ.
           log("error", "audit-consumer: write failed, will retry", {
             messageId: msg.MessageId,
-            err: err instanceof Error ? err.message : String(err),
+            err: errorMessage(err),
           });
           onProcessed?.("retry");
         }

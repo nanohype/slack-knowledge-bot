@@ -12,6 +12,7 @@
  * their own variable.
  */
 import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
+import { asError, errorMessage } from "./errors.js";
 
 const tracer = trace.getTracer("slack-knowledge-bot");
 
@@ -27,10 +28,10 @@ export const requestContext = {
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (err) {
-        span.recordException(err instanceof Error ? err : new Error(String(err)));
+        span.recordException(asError(err));
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: err instanceof Error ? err.message : String(err),
+          message: errorMessage(err),
         });
         throw err;
       } finally {

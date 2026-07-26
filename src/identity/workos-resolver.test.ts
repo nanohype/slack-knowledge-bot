@@ -235,4 +235,67 @@ describe("createWorkOSResolver", () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
+
+  // A cache row written by an older shape, or partially expired out from under
+  // us, must not resolve to a half-populated identity. Empty strings here are
+  // what the ACL guard would then use as the external user id, which is a
+  // different user's view of the world — so the read has to survive missing
+  // attributes rather than assume every one is present.
+  it("tolerates a cache row with missing attributes", async () => {
+    const nowSec = Math.floor(NOW_MS / 1000);
+    ddbMock.on(GetItemCommand).resolves({
+      Item: { slackUserId: { S: "U1" }, ttl: { N: String(nowSec + 600) } },
+    });
+    const resolver = createWorkOSResolver({
+      ...BASE_DEPS,
+      fetchImpl: vi.fn<typeof fetch>(),
+      ddbClient: new DynamoDBClient({}),
+    });
+
+    expect(await resolver.resolveSlackToExternal("U1", "u1@example.com")).toEqual({
+      externalUserId: "",
+      email: "",
+    });
+  });
+
+  // A row with no ttl attribute reads as ttl 0, which is always in the past, so
+  // it is treated as a miss rather than as a row that never expires.
+  it("treats a cache row with no ttl as expired", async () => {
+    ddbMock.on(GetItemCommand).resolves({ Item: { slackUserId: { S: "U1" } } });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ data: [], list_metadata: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const resolver = createWorkOSResolver({
+      ...BASE_DEPS,
+      fetchImpl,
+      ddbClient: new DynamoDBClient({}),
+    });
+
+    expect(await resolver.resolveSlackToExternal("U1", "u1@example.com")).toBeNull();
+    expect(fetchImpl).toHaveBeenCalled();
+  });
+
+  // The shipped wiring omits both optional deps, so the `?? default` arms are
+  // production configuration rather than a test convenience.
+  it("works with neither httpTimeoutMs nor now injected", async () => {
+    ddbMock.on(GetItemCommand).resolves({});
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ data: [], list_metadata: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const resolver = createWorkOSResolver({
+      workosApiKey: "sk_test_abc",
+      workosDirectoryId: "directory_01HNK",
+      identityCacheTable: "identity-cache",
+      fetchImpl,
+      ddbClient: new DynamoDBClient({}),
+    });
+
+    expect(await resolver.resolveSlackToExternal("U1", "u1@example.com")).toBeNull();
+  });
 });

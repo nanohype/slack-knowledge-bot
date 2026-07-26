@@ -44,4 +44,26 @@ describe("oauth/url-token", () => {
     const forged = `okta-u-2.${provider}.${exp}.${sig}`;
     expect(verifyOAuthStartUrl(forged, "notion")).toBeNull();
   });
+
+  // timingSafeEqual throws a RangeError on a length mismatch rather than
+  // returning false, so the explicit length guard in front of it is what turns a
+  // truncated signature into a clean rejection instead of a 500. Without it an
+  // attacker can tell "wrong length" from "wrong bytes" by the response.
+  it("rejects a signature of the wrong length without throwing", () => {
+    const token = signOAuthStartUrl("okta-u-1", "notion");
+    const [userId, provider, exp, sig] = token.split(".");
+
+    for (const forgedSig of [sig.slice(0, 8), `${sig}AAAA`, ""]) {
+      expect(() =>
+        verifyOAuthStartUrl(`${userId}.${provider}.${exp}.${forgedSig}`, "notion"),
+      ).not.toThrow();
+      expect(verifyOAuthStartUrl(`${userId}.${provider}.${exp}.${forgedSig}`, "notion")).toBeNull();
+    }
+  });
+
+  it("rejects a non-numeric expiry", () => {
+    const token = signOAuthStartUrl("okta-u-1", "notion");
+    const [userId, provider, , sig] = token.split(".");
+    expect(verifyOAuthStartUrl(`${userId}.${provider}.not-a-number.${sig}`, "notion")).toBeNull();
+  });
 });

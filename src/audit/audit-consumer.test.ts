@@ -216,6 +216,63 @@ describe("runAuditConsumer — retry path (transient write errors)", () => {
     expect(sqsMock.commandCalls(DeleteMessageCommand)).toHaveLength(0);
     expect(onProcessed).toHaveBeenCalledWith("retry");
   });
+
+  // The failure log stringifies whatever was thrown. An SDK that rejects with a
+  // non-Error — a string, or a plain object from a transport layer — must still
+  // produce a readable log line and the same retry outcome, not an "[object
+  // Object]" entry or a crash inside the error handler.
+  it("handles a non-Error rejection without losing the retry outcome", async () => {
+    sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message(validBody())] });
+    // callsFake, not rejects(): rejects() wraps a string in an Error, which is
+    // the arm already covered. A transport that throws a bare string is what
+    // reaches the String(err) fallback.
+    ddbMock.on(PutItemCommand).callsFake(() => {
+      throw "ProvisionedThroughputExceeded";
+    });
+    const onProcessed = vi.fn();
+
+    await runAuditConsumer(makeDeps({ onProcessed }));
+
+    expect(sqsMock.commandCalls(DeleteMessageCommand)).toHaveLength(0);
+    expect(onProcessed).toHaveBeenCalledWith("retry");
+  });
+});
+
+describe("runAuditConsumer — without the optional metrics hook", () => {
+  // onProcessed is optional and production wires it, but the consumer must not
+  // depend on it: an optional-call that is never exercised unwired is a crash
+  // waiting for the one deployment that omits the metric.
+  it("retries a failed write with no onProcessed hook", async () => {
+    sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message(validBody())] });
+    ddbMock.on(PutItemCommand).rejects(new Error("ProvisionedThroughputExceeded"));
+
+    await expect(runAuditConsumer(makeDeps({}))).resolves.toBeUndefined();
+    expect(sqsMock.commandCalls(DeleteMessageCommand)).toHaveLength(0);
+  });
+
+  it("completes a successful write with no onProcessed hook", async () => {
+    sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message(validBody())] });
+    ddbMock.on(PutItemCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    await expect(runAuditConsumer(makeDeps({}))).resolves.toBeUndefined();
+    expect(sqsMock.commandCalls(DeleteMessageCommand)).toHaveLength(1);
+  });
+});
+
+describe("runAuditConsumer — empty receives", () => {
+  // Long-polling returns without a Messages key when the queue is idle, which is
+  // the steady state for this consumer. It must loop rather than treat the
+  // absent key as a batch of zero-length or throw on it.
+  it("continues the loop when the receive returns no Messages key at all", async () => {
+    sqsMock.on(ReceiveMessageCommand).resolves({});
+    const onProcessed = vi.fn();
+
+    await runAuditConsumer(makeDeps({ onProcessed }));
+
+    expect(ddbMock.commandCalls(PutItemCommand)).toHaveLength(0);
+    expect(onProcessed).not.toHaveBeenCalled();
+  });
 });
 
 describe("runAuditConsumer — loop control", () => {

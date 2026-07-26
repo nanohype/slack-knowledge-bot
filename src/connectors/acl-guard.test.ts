@@ -134,3 +134,59 @@ describe("createAclGuard", () => {
     expect(ok.accessVerified).toBe(true);
   });
 });
+
+  // The fail-secure default for a source nothing has registered a verifier for.
+  // A hit from an unknown source cannot be checked against anything, so it must
+  // be redacted — the alternative is returning content whose access was never
+  // verified, which is the one outcome this guard exists to prevent. Reaching it
+  // needs a source outside SUPPORTED_SOURCES, i.e. a hit the retrieval layer
+  // produced from an index entry written before a connector was removed.
+  it("redacts a hit whose source has no registered verifier", async () => {
+    const guard = createAclGuard({ fetchImpl: vi.fn<typeof fetch>() });
+
+    const [out] = await guard.verify(
+      [hit({ source: "retired-connector" as RetrievalHit["source"], docId: "retired:doc:1" })],
+      tokens,
+    );
+
+    expect(out.accessVerified).toBe(false);
+    expect(out.wasRedacted).toBe(true);
+  });
+
+  // Same fail-secure rule one step later: the source is known, but no token
+  // could be obtained for this user. There is nothing to probe with, so the
+  // document is dropped rather than returned unverified.
+  it("redacts when no access token is available for the source", async () => {
+    const probe = vi.fn<typeof fetch>();
+    const guard = createAclGuard({ fetchImpl: probe });
+
+    const [out] = await guard.verify([hit()], async () => null);
+
+    expect(out.accessVerified).toBe(false);
+    expect(out.wasRedacted).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  // Tripping a breaker with no onCounter wired. The metric is optional, so the
+  // guard substitutes a no-op — and the thing that must not change when the hook
+  // is absent is the fail-secure behaviour: an open breaker still redacts, and
+  // the missing counter must not become an exception thrown from inside the
+  // breaker's onOpen callback, which would escape the guard entirely.
+  it("still fails secure when a breaker opens with no counter hook wired", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      throw new Error("ETIMEDOUT");
+    });
+    const guard = createAclGuard({ fetchImpl });
+
+    for (let i = 0; i < 5; i++) {
+      const [result] = await guard.verify([hit({ source: "notion" })], tokens);
+      expect(result.wasRedacted).toBe(true);
+    }
+
+    // Breaker is open now — the probe is short-circuited and the hit is still
+    // redacted rather than passed through unverified.
+    const [afterOpen] = await guard.verify([hit({ source: "notion" })], tokens);
+    expect(afterOpen.wasRedacted).toBe(true);
+    expect(afterOpen.accessVerified).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+  });
