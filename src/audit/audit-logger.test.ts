@@ -184,3 +184,75 @@ describe("buildQueryAuditEvent (pure)", () => {
     expect(built.queryHash).toBe(again.queryHash);
   });
 });
+
+// The optional deps are what production actually omits: index.ts wires the SQS
+// client and the two queue URLs and nothing else, so the `?? default` arms below
+// are the shipped configuration rather than a test convenience. Every other test
+// here supplies both, which left the real path unexercised.
+describe("createAuditLogger — with only the required dependencies", () => {
+  beforeEach(() => sqsMock.reset());
+
+  it("emits without an onCounter hook", async () => {
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
+    const logger = createAuditLogger({
+      sqs: new SQSClient({}),
+      queueUrl: "https://sqs/queue",
+      dlqUrl: "https://sqs/dlq",
+    });
+
+    await expect(logger.emitQuery(baseEvent())).resolves.toBeUndefined();
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
+  });
+
+  it("swallows a total failure without an onCounter hook to report it to", async () => {
+    // The counter is how a lost audit event becomes visible. Without one wired
+    // the emit still must not throw into the query path — an unrecorded query is
+    // bad, a query that fails because it could not be recorded is worse.
+    sqsMock.on(SendMessageCommand).rejects(new Error("everything is on fire"));
+    const logger = createAuditLogger({
+      sqs: new SQSClient({}),
+      queueUrl: "https://sqs/queue",
+      dlqUrl: "https://sqs/dlq",
+    });
+
+    await expect(logger.emitQuery(baseEvent())).resolves.toBeUndefined();
+  });
+
+  it("stamps a revocation timestamp from the real clock when no now() is injected", async () => {
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
+    const before = Date.now();
+    const logger = createAuditLogger({
+      sqs: new SQSClient({}),
+      queueUrl: "https://sqs/queue",
+      dlqUrl: "https://sqs/dlq",
+    });
+
+    await logger.emitRevocation({ userId: "okta-1", provider: "notion", reason: "user" });
+
+    const sent = JSON.parse(
+      sqsMock.commandCalls(SendMessageCommand)[0].args[0].input.MessageBody as string,
+    );
+    expect(Date.parse(sent.timestamp)).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe("buildQueryAuditEvent — default clock", () => {
+  it("timestamps from the real clock when no now() is passed", () => {
+    const before = Date.now();
+    const event = buildQueryAuditEvent({
+      traceId: "t-1",
+      userId: "okta-1",
+      slackUserId: "U1",
+      channelId: "C1",
+      rawQuery: "what is the vacation policy",
+      retrievedDocIds: ["notion:page:p1"],
+      accessibleDocIds: ["notion:page:p1"],
+      redactedDocCount: 0,
+      answerText: "unlimited",
+      latencyMs: 42,
+      sources: [],
+    });
+
+    expect(Date.parse(event.timestamp)).toBeGreaterThanOrEqual(before);
+  });
+});
