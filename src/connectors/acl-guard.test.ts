@@ -133,7 +133,6 @@ describe("createAclGuard", () => {
     const [ok] = await otherGuard.verify([hit({ source: "drive", docId: "drive:f:1" })], tokens);
     expect(ok.accessVerified).toBe(true);
   });
-});
 
   // The fail-secure default for a source nothing has registered a verifier for.
   // A hit from an unknown source cannot be checked against anything, so it must
@@ -190,3 +189,4 @@ describe("createAclGuard", () => {
     expect(afterOpen.accessVerified).toBe(false);
     expect(fetchImpl).toHaveBeenCalledTimes(5);
   });
+});
