@@ -319,37 +319,40 @@ Audit log stores `scrubbed_query`, never raw `query_text`.
 
 ## 8. Evals & Quality Gates
 
-### 8.1 Offline Evals (CI)
+### 8.1 Eval tier (`evals/`)
 
-```python
-# evals/test_rag_quality.py
-EVAL_DATASET = [
-    {
-        "question": "What is NanoCorp's vacation policy?",
-        "expected_source_contains": ["vacation", "PTO", "time off"],
-        "should_cite": True,
-    },
-    ...
-]
+The suite the product measures against lives under `evals/`, same shape as the
+other nanohype LLM tenants. Two names, never one:
 
-def test_citation_present():
-    """Every answer must contain at least one citation."""
-    for case in EVAL_DATASET:
-        response = slack-knowledge-bot.query(case["question"], user=TEST_USER)
-        assert len(response.citations) >= 1
+| | Command | Needs a model | Every PR | Answers |
+| --- | --- | --- | --- | --- |
+| **Offline** | `npm test` (picks up `evals/*.test.ts`) | no | yes | Is the golden set still a golden set? Does the grader grade? |
+| **Model** | `npm run eval` | yes | own workflow (`.github/workflows/evals.yml`) | Does the model hold up on these prompts? |
 
-def test_no_hallucination():
-    """Answer must not contain claims absent from retrieved context."""
-    # Use LLM-as-judge with Claude Haiku to check grounding
-    ...
-
-def test_stale_warning():
-    """Stale docs must surface warning."""
-    response = slack-knowledge-bot.query("old policy question", user=TEST_USER)
-    for citation in response.citations:
-        if citation.days_old > 90:
-            assert "⚠️" in citation.formatted
+```sh
+EVAL_LLM=bedrock npm run eval
 ```
+
+`EVAL_LLM` unset skips; set means it **must** run. A broken provider is a hard
+failure, never a skip.
+
+Golden cases live in `evals/fixtures/rag.json`. Two kinds:
+
+- **`capability`** — grounded answers, typed citations, honest insufficient-
+  context refusal, stale citation flagging. Scored as a **rate against a
+  floor** (`capabilityFloor` in the fixture).
+- **`adversarial`** — injection via retrieved document content, injection via
+  the user query, tag smuggling, prompt exfiltration, fabricated policy
+  claims. Asserted **individually at 100%**.
+
+Graders are deterministic (`mentions`, `absent`, `mustCite`, `mustHaveStale`,
+`answerContains`). Retrieved document text is fenced on the production path
+(`src/rag/generator.ts` via `src/vendor/runtime/guardrails.ts`) before it
+reaches the model; the adversarial set measures whether the model holds the
+line given that fence.
+
+Hybrid retrieval (RRF of k-NN + lexical ranks) is covered by unit tests on
+`rrfFusion` and the retriever — not by this model tier. See `evals/README.md`.
 
 ### 8.2 Production Monitors
 

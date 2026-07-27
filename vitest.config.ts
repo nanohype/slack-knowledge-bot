@@ -4,7 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // evals/*.test.ts is the offline half of the eval tier — fixture
+    // validity and the graders. It runs here, on every PR, because the model
+    // half can be skipped and a rotted golden set must not wait for it.
+    // The model half is evals/*.eval.ts, on its own config (npm run eval).
+    include: ["src/**/*.test.ts", "evals/**/*.test.ts"],
     setupFiles: ["src/test-setup.ts"],
     coverage: {
       provider: "v8",
