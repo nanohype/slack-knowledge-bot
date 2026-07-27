@@ -76,12 +76,12 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 
 | | |
 |---|---|
-| **What it does** | Two calls per query: (1) embed the user's question via Titan for k-NN search, (2) generate the grounded answer via Claude Sonnet 4.6 with the verified-accessible documents as context. |
+| **What it does** | Two calls per query: (1) embed the user's question via Titan for k-NN search, (2) generate the grounded answer via Claude Sonnet 5 with the verified-accessible documents as context. |
 | **Port** | `BedrockRuntimeClient` (AWS SDK v3). Factories accept the client directly — no custom port type because the SDK is already a typed client. |
 | **Factory** | `createRetriever({openSearch, bedrock, embeddingModelId})` (`src/rag/retriever.ts`), `createGenerator({bedrock, llmModelId, staleThresholdDays, …})` (`src/rag/generator.ts`) |
 | **Auth** | Pod Identity — the chart's ServiceAccount is bound to the `<env>-slack-knowledge-bot-tenant` role, whose `bedrock:InvokeModel` grant is clamped to the model IDs in the Platform CR's `spec.identity.allowedModels`. No API key. |
-| **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-4-6` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
-| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 4.6 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `tenant-substrate` component supplying the substrate grants — there's no app-level IAM. |
+| **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-5` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
+| **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 5 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `tenant-substrate` component supplying the substrate grants — there's no app-level IAM. |
 | **Verify** | `npm test -- --grep "retriever\|generator"` (RRF fusion ranking + dedup, Bedrock failure paths, stale-citation marker, circuit-breaker trip → empty hits) |
 | **Security** | Inference is on-account, so source content never reaches a third party. Bedrock model-invocation logging is governed at the landing-zone account/region level (an org/substrate concern) — it is not toggled by app code, a request header, or anything in this chart. See `docs/threat-model.md`. |
 

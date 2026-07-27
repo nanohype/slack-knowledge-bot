@@ -65,8 +65,8 @@ spec:
   tenant: workplace
   budget: { name: slack-knowledge-bot }
   identity:
-    allowedModels: # Claude Sonnet 4.6 (answers) + Titan (query embeddings)
-      - us.anthropic.claude-sonnet-4-6
+    allowedModels: # Claude Sonnet 5 (answers) + Titan (query embeddings)
+      - us.anthropic.claude-sonnet-5
       - amazon.titan-embed-text-v2:0
     extraPolicyArns: [] # escape hatch; substrate access is operator-generated from spec.datastores
   compliance: { soc2: true }

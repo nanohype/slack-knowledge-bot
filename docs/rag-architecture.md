@@ -58,7 +58,7 @@
 │                                     │                                       │
 │                                     ▼                                       │
 │                          ┌─────────────────────┐                           │
-│                          │  Claude Sonnet 4.6   │                           │
+│                          │  Claude Sonnet 5   │                           │
 │                          │  (Amazon Bedrock)    │                           │
 │                          │  - Grounded answer   │                           │
 │                          │  - Citation output   │                           │
@@ -180,7 +180,7 @@
    - Assemble context: [chunk_text + title + URL + last_modified]
    - Flag chunks with last_modified > 90 days ago as STALE
 
-10. GENERATE ANSWER via Claude Sonnet 4.6 (Bedrock)
+10. GENERATE ANSWER via Claude Sonnet 5 (Bedrock)
     System prompt: See Section 4
     User message: {context} + {query}
     max_tokens: 1024, temperature: 0
@@ -209,7 +209,7 @@
 | Hybrid search (pgvector) | 150ms |
 | ACL verification (parallel, 3 sources) | 400ms |
 | Context assembly | 20ms |
-| LLM generation (Claude Sonnet 4.6) | 1,800ms |
+| LLM generation (Claude Sonnet 5) | 1,800ms |
 | Response formatting + Slack send | 50ms |
 | **Total (p50)** | **~2,535ms** ✅ |
 
@@ -372,8 +372,8 @@ Hybrid retrieval (RRF of k-NN + lexical ranks) is covered by unit tests on
 |-----------|-----------|----------------------------------------|
 | Titan Embeddings v2 (queries) | $0.00002/1K tokens | ~$1.50 |
 | Titan Embeddings v2 (indexing) | $0.00002/1K tokens | ~$2.00 |
-| Claude Sonnet 4.6 input | $0.003/1K tokens | ~$135 |
-| Claude Sonnet 4.6 output | $0.015/1K tokens | ~$67.50 |
+| Claude Sonnet 5 input | $0.003/1K tokens | ~$135 |
+| Claude Sonnet 5 output | $0.015/1K tokens | ~$67.50 |
 | RDS Postgres db.t4g.micro (pgvector) | ~$15/month | $15 |
 | **Total AI/Search** | | **~$556/month** |
 

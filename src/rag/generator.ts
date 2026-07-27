@@ -1,5 +1,5 @@
 /**
- * Answer generator: Bedrock (Claude Sonnet 4.6 by default).
+ * Answer generator: Bedrock (Claude Sonnet 5 by default).
  *
  * All inference on the deploying account. No source content to
  * third-party providers.
@@ -120,7 +120,10 @@ export function createGenerator(deps: GeneratorConfig): Generator {
             body: JSON.stringify({
               anthropic_version: "bedrock-2023-05-31",
               max_tokens: 1024,
-              temperature: 0,
+              // No temperature: Sonnet 5 rejects the knob
+              // ("`temperature` is deprecated for this model"). Default
+              // sampling is what production gets; there is no dial to pin a
+              // run down with — one reason capability is scored as a rate.
               // Prompt-cache breakpoint on the stable system prefix: it's the same
               // text on every query, so we mark it ephemeral-cacheable. The per-query
               // [CONTEXT]/[QUESTION] user turn stays after the breakpoint, uncached.

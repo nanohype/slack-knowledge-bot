@@ -31,7 +31,7 @@ const NOW = new Date("2026-04-15T00:00:00Z").getTime();
 
 const BASE_DEPS = {
   bedrock: new BedrockRuntimeClient({}),
-  llmModelId: "anthropic.claude-sonnet-4-6",
+  llmModelId: "us.anthropic.claude-sonnet-5",
   staleThresholdDays: 90,
   now: () => NOW,
 };
@@ -78,7 +78,7 @@ describe("createGenerator", () => {
     });
 
     const calls = bedrockMock.commandCalls(InvokeModelCommand);
-    expect(calls[0].args[0].input.modelId).toBe("anthropic.claude-sonnet-4-6");
+    expect(calls[0].args[0].input.modelId).toBe("us.anthropic.claude-sonnet-5");
     // InvokeModel body was passed in as a JSON string (SDK accepts Uint8Array | string),
     // so we parse directly — no decode step needed.
     const body = JSON.parse(calls[0].args[0].input.body as string);

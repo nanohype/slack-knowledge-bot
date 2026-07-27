@@ -17,7 +17,7 @@ const suite = loadSuite("rag.json");
 const configured = (process.env.EVAL_LLM ?? "").trim();
 
 const MODEL_ID =
-  process.env.EVAL_MODEL || process.env.BEDROCK_LLM_MODEL_ID || "us.anthropic.claude-sonnet-4-6";
+  process.env.EVAL_MODEL || process.env.BEDROCK_LLM_MODEL_ID || "us.anthropic.claude-sonnet-5";
 const REGION = process.env.AWS_REGION || process.env.BEDROCK_REGION || "us-west-2";
 // Match production default so stale cases exercise the real threshold.
 const STALE_THRESHOLD_DAYS = Number(process.env.STALE_DOC_THRESHOLD_DAYS ?? 90);
