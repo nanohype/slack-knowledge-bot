@@ -1,13 +1,29 @@
 {
   "entries": [
-    { "src": "library/scripts/sync-vendored.mjs", "dest": "scripts/sync-vendored.mjs" },
-    { "src": "library/config/biome.base.json", "dest": "biome.base.json" },
+    {
+      "src": "library/scripts/sync-vendored.mjs",
+      "dest": "scripts/sync-vendored.mjs"
+    },
+    {
+      "src": "library/config/biome.base.json",
+      "dest": "biome.base.json"
+    },
     {
       "src": "library/runtime/src/circuit-breaker.ts",
       "dest": "src/vendor/runtime/circuit-breaker.ts"
     },
-    { "src": "library/runtime/src/metrics.ts", "dest": "src/vendor/runtime/metrics.ts" },
-    { "src": "library/runtime/src/pii.ts", "dest": "src/vendor/runtime/pii.ts" },
+    {
+      "src": "library/runtime/src/guardrails.ts",
+      "dest": "src/vendor/runtime/guardrails.ts"
+    },
+    {
+      "src": "library/runtime/src/metrics.ts",
+      "dest": "src/vendor/runtime/metrics.ts"
+    },
+    {
+      "src": "library/runtime/src/pii.ts",
+      "dest": "src/vendor/runtime/pii.ts"
+    },
     {
       "src": "library/runtime/src/workos-directory.ts",
       "dest": "src/vendor/runtime/workos-directory.ts"
