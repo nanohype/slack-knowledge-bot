@@ -48,11 +48,11 @@ const ConfigSchema = z.object({
 
   // Bedrock
   BEDROCK_REGION: z.string().default("us-west-2"),
-  // Claude Sonnet 4.6 is only reachable via a cross-region inference
+  // Claude Sonnet 5 is only reachable via a cross-region inference
   // profile (`us.anthropic.…`); invoking the bare model ID returns
   // `Invocation … with on-demand throughput isn't supported`. Override
   // via env if you want to pin a region-specific profile.
-  BEDROCK_LLM_MODEL_ID: z.string().default("us.anthropic.claude-sonnet-4-6"),
+  BEDROCK_LLM_MODEL_ID: z.string().default("us.anthropic.claude-sonnet-5"),
   BEDROCK_EMBEDDING_MODEL_ID: z.string().default("amazon.titan-embed-text-v2:0"),
 
   // WorkOS (workforce identity — Directory Sync via SCIM)

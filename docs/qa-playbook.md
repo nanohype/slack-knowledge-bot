@@ -90,13 +90,13 @@ curl -s "https://slack-knowledge-bot-staging.example.com/health"
 
 ## 3. Enable Bedrock model access (5 min)
 
-The `us.anthropic.claude-sonnet-4-6` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IAM role deliberately doesn't have. **Your admin session does.**
+The `us.anthropic.claude-sonnet-5` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IAM role deliberately doesn't have. **Your admin session does.**
 
 For each of us-east-1, us-east-2, us-west-2:
 
 1. AWS Console → switch region
 2. Bedrock → **Chat / Test** (or Playgrounds → Chat)
-3. Model: **Claude Sonnet 4.6**
+3. Model: **Claude Sonnet 5**
 4. Type anything, hit Send
 5. If prompted for "use case details" (first-time Anthropic access), fill it in — approved in <2 min
 
@@ -110,7 +110,7 @@ Same for Titan embeddings (us-west-2 only):
 
 ```bash
 aws bedrock-runtime invoke-model \
-  --model-id us.anthropic.claude-sonnet-4-6 \
+  --model-id us.anthropic.claude-sonnet-5 \
   --body '{"anthropic_version":"bedrock-2023-05-31","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}' \
   --cli-binary-format raw-in-base64-out \
   /tmp/bedrock-probe.json && cat /tmp/bedrock-probe.json
@@ -474,7 +474,7 @@ AccessDeniedException: … aws-marketplace:ViewSubscriptions, aws-marketplace:Su
 
 **Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The pod's IAM role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
 
-**Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 4.6 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted.
+**Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 5 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted.
 
 ---
 
@@ -482,12 +482,12 @@ AccessDeniedException: … aws-marketplace:ViewSubscriptions, aws-marketplace:Su
 
 **Symptom:** Log line:
 ```
-ValidationException: Invocation of model ID anthropic.claude-sonnet-4-6 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.
+ValidationException: Invocation of model ID anthropic.claude-sonnet-5 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.
 ```
 
-**Root cause:** Claude Sonnet 4.6 is only reachable via a cross-region inference profile; the bare foundation-model ID doesn't work.
+**Root cause:** Claude Sonnet 5 is only reachable via a cross-region inference profile; the bare foundation-model ID doesn't work.
 
-**Fix:** `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-4-6`. This is already the default in `src/config/index.ts` — if you see this error, check the pod's env for an override (`kubectl -n tenants-slack-knowledge-bot exec deploy/slack-knowledge-bot -- printenv BEDROCK_LLM_MODEL_ID`) and remove it from chart values.
+**Fix:** `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-5`. This is already the default in `src/config/index.ts` — if you see this error, check the pod's env for an override (`kubectl -n tenants-slack-knowledge-bot exec deploy/slack-knowledge-bot -- printenv BEDROCK_LLM_MODEL_ID`) and remove it from chart values.
 
 ---
 
