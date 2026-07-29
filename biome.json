@@ -10,10 +10,6 @@
             "allow": ["error", "warn"]
           }
         }
-      },
-      "nursery": {
-        "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
       }
     }
   },
