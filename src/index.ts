@@ -322,4 +322,13 @@ process.on("uncaughtException", (err) => {
     // rather than completing with a bot that can't answer queries.
     logger.error({ err }, "Bolt start failed; HTTP server up for /health, readiness held false");
   }
-})();
+})().catch((err) => {
+  // Only reachable if `httpServer.listen` itself throws — the inner catch owns
+  // every Bolt failure. Without a handler here that rejection reaches the
+  // `unhandledRejection` listener above, which swallows to keep the task alive;
+  // correct for a request-scoped failure, wrong for this one. There is no HTTP
+  // server, so /health cannot answer, so the pod stays alive and permanently
+  // unready and nothing restarts it. Exit and let the orchestrator try again.
+  logger.error({ err }, "HTTP server failed to bind; exiting for a clean restart");
+  process.exit(1);
+});
