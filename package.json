@@ -1,7 +1,7 @@
 {
   "name": "slack-knowledge-bot",
   "version": "0.1.0",
-  "description": "SlackKnowledgeBot — Slack bot for NanoCorp knowledge retrieval",
+  "description": "SlackKnowledgeBot \u2014 Slack bot for NanoCorp knowledge retrieval",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -26,6 +26,8 @@
     "schemas:freshness": "node scripts/sync-crd-schemas.mjs --freshness",
     "sync:vendored": "node scripts/sync-vendored.mjs",
     "sync:vendored:check": "node scripts/sync-vendored.mjs --check",
+    "sync:vendored:freshness": "node scripts/sync-vendored.mjs --freshness",
+    "sync:vendored:selftest": "node scripts/sync-vendored.mjs --self-test",
     "audit:prod": "npm audit --audit-level=high --omit=dev",
     "chart:lint": "helm lint chart",
     "chart:template:staging": "helm template slack-knowledge-bot chart -f chart/values-staging.yaml",
