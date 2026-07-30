@@ -11,9 +11,11 @@
  * regression: Titan's own API is single-input, so the direct path already sent
  * one text at a time.
  *
- * A small JSON body over `fetch` rather than a client library — the request is
- * three fields and the response is one array, and a dependency for that would
- * be more surface than the call it wraps.
+ * A small JSON body over an injected `fetch` port rather than a client library —
+ * the request is three fields and the response is one array, and a dependency
+ * for that would be more surface than the call it wraps. The port is the repo's
+ * standing rule for every external boundary: tests hand it a typed fake instead
+ * of reaching for a global stub.
  */
 
 /** The subset of the OpenAI embeddings response this reads. */
@@ -22,6 +24,8 @@ interface EmbeddingsResponse {
 }
 
 export interface GatewayEmbedderDeps {
+  /** The HTTP port. Injected so tests need no global stub. */
+  fetchImpl: typeof fetch;
   /** Base URL of the Platform's ModelGateway. */
   endpoint: string;
   /** A route name on that gateway, not a model id. */
@@ -45,7 +49,7 @@ export interface GatewayEmbedderDeps {
 export async function embedViaGateway(text: string, deps: GatewayEmbedderDeps): Promise<number[]> {
   // Trailing slash trimmed so the joined path cannot end up doubled.
   const base = deps.endpoint.replace(/\/+$/, "");
-  const response = await fetch(`${base}/v1/embeddings`, {
+  const response = await deps.fetchImpl(`${base}/v1/embeddings`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: deps.route, input: text, dimensions: deps.dimensions }),

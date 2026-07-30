@@ -14,7 +14,7 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { AllMiddlewareArgs, App, SayFn } from "@slack/bolt";
 import { mockClient } from "aws-sdk-client-mock";
 import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuditLogger } from "../audit/audit-logger.js";
 import { createAclGuard } from "../connectors/acl-guard.js";
 import type { RetrievalHit } from "../connectors/types.js";
@@ -174,6 +174,7 @@ function buildDeps(overrides: {
   });
   const retriever = createRetriever({
     backend,
+    fetchImpl: embeddingsFetch as unknown as typeof fetch,
     gatewayEndpoint: GATEWAY,
     embeddingRoute: "embeddings",
     embeddingDimensions: 2,
@@ -220,11 +221,8 @@ describe("query pipeline integration", () => {
     ddbMock.reset();
     embeddingsFetch.mockReset();
     messagesCreate.mockReset();
-    vi.stubGlobal("fetch", embeddingsFetch);
     sqsMock.reset();
   });
-
-  afterEach(() => vi.unstubAllGlobals());
 
   it("happy path: rate-limit allow → Slack email → directory resolve → retrieve → ACL grant → generate → audit", async () => {
     ddbMock.on(GetItemCommand).resolves({
@@ -432,11 +430,8 @@ describe("query handler lifecycle (registration + graceful drain)", () => {
     ddbMock.reset();
     embeddingsFetch.mockReset();
     messagesCreate.mockReset();
-    vi.stubGlobal("fetch", embeddingsFetch);
     sqsMock.reset();
   });
-
-  afterEach(() => vi.unstubAllGlobals());
 
   // Capture the listeners registerWith() hands to Bolt so we can drive them
   // directly — the same wrappers that feed the in-flight set.

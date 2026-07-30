@@ -31,6 +31,8 @@ const HALF_OPEN_AFTER_MS = 30_000;
 
 export interface RetrieverConfig {
   backend: RetrievalBackend;
+  /** The HTTP port used to reach the gateway's embeddings route. */
+  fetchImpl: typeof fetch;
   /** Base URL of the Platform's ModelGateway. */
   gatewayEndpoint: string;
   /** The embeddings route on that gateway, not a model id. */
@@ -65,6 +67,7 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
       const start = Date.now();
       try {
         const embedding = await embedViaGateway(queryText, {
+          fetchImpl: deps.fetchImpl,
           endpoint: deps.gatewayEndpoint,
           route: deps.embeddingRoute,
           timeoutMs: EMBED_TIMEOUT_MS,

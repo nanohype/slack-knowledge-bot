@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RetrievalHit } from "../connectors/types.js";
 import type { RetrievalBackend } from "./backends/types.js";
 import { createRetriever, rrfFusion } from "./retriever.js";
@@ -14,6 +14,7 @@ const fetchMock = vi.fn();
 
 /** Route config shared by every retriever built here. */
 const MODEL_DEPS = {
+  fetchImpl: fetchMock as unknown as typeof fetch,
   gatewayEndpoint: GATEWAY,
   embeddingRoute: "embeddings",
   embeddingDimensions: DIM,
@@ -53,10 +54,7 @@ function fakeBackend(
 describe("createRetriever — embedQuery", () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
   });
-  afterEach(() => vi.unstubAllGlobals());
-
   it("embeds through the gateway's embeddings route and returns the vector", async () => {
     embeddingsRespond([0.1, 0.2, 0.3]);
     const { backend } = fakeBackend([], []);

@@ -160,6 +160,7 @@ const rateLimiter = createRateLimiter({
 
 const retriever = createRetriever({
   backend: retrievalBackend,
+  fetchImpl: fetch,
   gatewayEndpoint: config.MODEL_GATEWAY_ENDPOINT,
   embeddingRoute: config.EMBEDDING_ROUTE,
   embeddingDimensions: TITAN_EMBEDDING_DIM,

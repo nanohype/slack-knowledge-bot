@@ -122,6 +122,9 @@ function assertNoPlaceholders(): void {
  */
 async function embed(endpoint: string, route: string, text: string): Promise<number[]> {
   return embedViaGateway(text, {
+    // allow-fetch — this is a one-off operator script, not a service module, so
+    // there is no composition root to inject the port from.
+    fetchImpl: fetch,
     endpoint,
     route,
     timeoutMs: 5000,
