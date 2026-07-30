@@ -339,6 +339,19 @@ function validateDocument(doc, index, registry, errors) {
 
 // ── consistency across documents and the chart ──────────────────────────────
 
+/**
+ * Does an `allowedModels` entry grant an invoked model id?
+ *
+ * Exact match, or a bare foundation-model id granting its `us.` cross-region
+ * profile — how the operator expands a bare entry. Deliberately not a prefix
+ * test: `...-sonnet-4` must not satisfy `...-sonnet-5`.
+ */
+function modelGrantCovers(allowed, invoked) {
+  if (allowed === invoked) return true;
+  if (/^[a-z]{2,6}\./.test(allowed) && !allowed.startsWith("anthropic.")) return false;
+  return invoked === `us.${allowed}`;
+}
+
 /** Parse an `OTEL_RESOURCE_ATTRIBUTES` string into a plain object. */
 const parseResourceAttributes = (value) =>
   Object.fromEntries(
@@ -402,6 +415,71 @@ function checkConsistency(docs, chartValues, errors) {
       `Platform/${platformName}: spec.identity.allowedModels and allowedModelFamilies are ` +
         "mutually exclusive (CRD admission rule)",
     );
+  }
+
+  // ── the model plane ───────────────────────────────────────────────────
+  //
+  // The gateway runs under the tenant ServiceAccount, so it invokes Bedrock as
+  // the tenant and the operator's explicit Deny over NotResource applies to it.
+  // A model a route names and allowedModels omits is AccessDenied on every call,
+  // in a deployment whose CI is green — and both sides are free-form strings, so
+  // nothing but this holds them together.
+  //
+  // What is checked is the model each route *invokes*: its crossRegionProfile
+  // when set, otherwise its modelId — the same resolution the operator applies
+  // when it fills modelNameOverride. Checking both would reject a CR that grants
+  // only `us.`-prefixed models, which is correct: on such a route the bare id is
+  // metadata and never reaches Bedrock.
+  const gateways = docs.filter((d) => d.kind === "ModelGateway");
+  const allowed = identity.allowedModels;
+  if (
+    Array.isArray(allowed) &&
+    allowed.length > 0 &&
+    !(identity.allowedModelFamilies?.length > 0)
+  ) {
+    for (const g of gateways) {
+      for (const route of g.spec?.routes ?? []) {
+        if (route.modelSource === "imported") continue;
+        const field = route.crossRegionProfile ? "crossRegionProfile" : "modelId";
+        const invoked = route.crossRegionProfile || route.modelId;
+        if (typeof invoked !== "string" || invoked === "") continue;
+        if (allowed.some((a) => modelGrantCovers(a, invoked))) continue;
+        errors.push(
+          `ModelGateway/${g.metadata?.name}: routes[${route.name}].${field}="${invoked}" is not ` +
+            `covered by Platform.spec.identity.allowedModels [${allowed.join(", ")}] — the gateway ` +
+            "invokes Bedrock as the tenant, and the operator denies every model outside that list",
+        );
+      }
+    }
+  }
+
+  // The operator derives the endpoint from the Platform name and never reads the
+  // chart; the chart names routes the CR must declare. A rename on either side
+  // yields pods that start cleanly and fail every model call — connection
+  // refused, or a gateway 404 for an unmatched route.
+  const declaredRoutes = new Set(
+    gateways.flatMap((g) => (g.spec?.routes ?? []).map((r) => r.name)),
+  );
+  const expectedEndpoint = `http://${platformName}-gateway.tenants-${platformName}.svc.cluster.local:8080`;
+  for (const { file, values } of chartValues) {
+    const endpoint = values?.env?.MODEL_GATEWAY_ENDPOINT;
+    if (typeof endpoint === "string" && endpoint !== "" && endpoint !== expectedEndpoint) {
+      errors.push(
+        `${file}: env.MODEL_GATEWAY_ENDPOINT="${endpoint}" is not the endpoint the operator ` +
+          `publishes for Platform/${platformName} ("${expectedEndpoint}") — the app starts ` +
+          "cleanly and fails every model call with a connection error",
+      );
+    }
+    for (const key of ["MODEL_ROUTE", "EMBEDDING_ROUTE"]) {
+      const route = values?.env?.[key];
+      if (typeof route !== "string" || route === "" || declaredRoutes.size === 0) continue;
+      if (declaredRoutes.has(route)) continue;
+      errors.push(
+        `${file}: env.${key}="${route}" names no route on the ModelGateway (declared: ` +
+          `${[...declaredRoutes].join(", ")}) — the gateway has no rule matching it, so every ` +
+          "request is refused at the gateway rather than reaching a model",
+      );
+    }
   }
 
   for (const { file, values } of chartValues) {
@@ -513,6 +591,35 @@ function schemaIntegritySelfTest(sample) {
 function selfTest(documents, registry, chartValues, sample) {
   const clone = () => JSON.parse(JSON.stringify(documents));
   const cases = [
+    {
+      // The drift that costs: a route's model moves and allowedModels does not,
+      // so the operator's Deny makes every call AccessDenied while CI stays green.
+      name: "a route model that allowedModels does not grant",
+      mutate: (docs) => {
+        docs.find((d) => d.kind === "Platform").spec.identity.allowedModels = [
+          "us.anthropic.claude-opus-5",
+        ];
+      },
+      expect: /is not covered by Platform\.spec\.identity\.allowedModels/,
+    },
+    {
+      // The chart names routes; the CR declares them. Nothing else couples the
+      // two, and a mismatch is a gateway 404 on every request.
+      name: "a route renamed on the CR while the chart still names the old one",
+      mutate: (docs) => {
+        docs.find((d) => d.kind === "ModelGateway").spec.routes[1].name = "vectors";
+      },
+      expect: /names no route on the ModelGateway/,
+    },
+    {
+      // The operator derives the endpoint from the Platform name and never reads
+      // the chart, so a rename on either side is connection-refused at run time.
+      name: "a Platform renamed so the published endpoint no longer matches the chart",
+      mutate: (docs) => {
+        docs.find((d) => d.kind === "Platform").metadata.name = "slack-knowledge-bot-v2";
+      },
+      expect: /is not the endpoint the operator publishes/,
+    },
     {
       name: "unknown field on Tenant.spec",
       mutate: (docs) => {

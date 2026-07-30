@@ -80,7 +80,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | **Port** | `BedrockRuntimeClient` (AWS SDK v3). Factories accept the client directly — no custom port type because the SDK is already a typed client. |
 | **Factory** | `createRetriever({openSearch, bedrock, embeddingModelId})` (`src/rag/retriever.ts`), `createGenerator({bedrock, llmModelId, staleThresholdDays, …})` (`src/rag/generator.ts`) |
 | **Auth** | Pod Identity — the chart's ServiceAccount is bound to the `<env>-slack-knowledge-bot-tenant` role, whose `bedrock:InvokeModel` grant is clamped to the model IDs in the Platform CR's `spec.identity.allowedModels`. No API key. |
-| **Env vars** | `BEDROCK_REGION` (default `us-west-2`), `BEDROCK_LLM_MODEL_ID` (default `us.anthropic.claude-sonnet-5` — the cross-region inference profile; the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID` (default `amazon.titan-embed-text-v2:0`) |
+| **Env vars** | `MODEL_GATEWAY_ENDPOINT` (required — the Platform's ModelGateway), `MODEL_ROUTE` (default `default`), `EMBEDDING_ROUTE` (default `embeddings`). Route names, not model ids: the `ModelGateway` CR maps them to `us.anthropic.claude-sonnet-5` and `amazon.titan-embed-text-v2:0`, and the gateway holds the AWS identity |
 | **Setup** | Enable model access in the AWS Console → Bedrock → Model access → request access to Claude Sonnet 5 + Titan Embeddings v2. IAM is provisioned by the eks-agent-platform operator from the Platform CR, with the landing-zone `tenant-substrate` component supplying the substrate grants — there's no app-level IAM. |
 | **Verify** | `npm test -- --grep "retriever\|generator"` (RRF fusion ranking + dedup, Bedrock failure paths, stale-citation marker, circuit-breaker trip → empty hits) |
 | **Security** | Inference is on-account, so source content never reaches a third party. Bedrock model-invocation logging is governed at the landing-zone account/region level (an org/substrate concern) — it is not toggled by app code, a request header, or anything in this chart. See `docs/threat-model.md`. |
@@ -138,7 +138,7 @@ Every third-party integration is behind a typed port (`createXxx(deps)` factory)
 | Notion | `ConnectorVerifier` | Per-user OAuth | `NOTION_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Confluence | `ConnectorVerifier` | Per-user OAuth | `CONFLUENCE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
 | Google Drive | `ConnectorVerifier` | Per-user OAuth | `GOOGLE_OAUTH_CLIENT_ID/SECRET` | Yes — register a new verifier |
-| Bedrock | `BedrockRuntimeClient` | Pod Identity | `BEDROCK_REGION`, `BEDROCK_LLM_MODEL_ID`, `BEDROCK_EMBEDDING_MODEL_ID` | Yes — pass a different LLM client |
+| Model plane | `Anthropic` (Messages) + `fetch` (embeddings) | the gateway's Pod Identity, not the app's | `MODEL_GATEWAY_ENDPOINT`, `MODEL_ROUTE`, `EMBEDDING_ROUTE` | Yes — pass a different client, or repoint the route on the CR |
 | Retrieval (pgvector) | `RetrievalBackend` | Aurora + ESO-synced creds | `RETRIEVAL_BACKEND_URL` or `PG*` fields | Yes — any implementation of the two-method port |
 | Redis | `RateLimiterRedisPort` | VPC + TLS | `REDIS_URL` | Yes — any sorted-set-shaped backend |
 | SQS | `SQSClient` | Pod Identity | `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL` | Yes — pass a different queue client |

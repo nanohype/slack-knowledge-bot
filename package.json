@@ -1,7 +1,7 @@
 {
   "name": "slack-knowledge-bot",
   "version": "0.1.0",
-  "description": "SlackKnowledgeBot \u2014 Slack bot for NanoCorp knowledge retrieval",
+  "description": "SlackKnowledgeBot — Slack bot for NanoCorp knowledge retrieval",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -34,7 +34,7 @@
     "chart:template:production": "helm template slack-knowledge-bot chart -f chart/values-production.yaml"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.1030.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@aws-sdk/client-dynamodb": "^3.1030.0",
     "@aws-sdk/client-kms": "^3.1030.0",
     "@aws-sdk/client-s3": "^3.1030.0",

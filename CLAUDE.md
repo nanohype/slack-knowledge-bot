@@ -8,7 +8,7 @@ Internal Slack knowledge bot — answers employee questions over Notion, Conflue
 
 A nanohype composite, shipped as a standalone Platform tenant. Composes the `slack-bot`, `rag-pipeline`, and `module-vector-store` patterns into a working application. Employees @mention the bot or DM it; it answers grounded in their own access-controlled documents and cites every source.
 
-**Built as a reusable subsystem.** Every external-IO service is a `createXxx(deps)` factory accepting typed ports (`typeof fetch`, a narrow `RedisPort`, a `RetrievalBackend`, or an AWS SDK client). `src/index.ts` is the single place real SDK clients are constructed; everything downstream runs against port interfaces, so swapping Redis → Valkey, WorkOS → Okta/Entra/Google Admin, pgvector → OpenSearch/Qdrant/Pinecone, or Bedrock → another LLM is a one-file change.
+**Built as a reusable subsystem.** Every external-IO service is a `createXxx(deps)` factory accepting typed ports (`typeof fetch`, a narrow `RedisPort`, a `RetrievalBackend`, or an AWS SDK client). `src/index.ts` is the single place real SDK clients are constructed; everything downstream runs against port interfaces, so swapping Redis → Valkey, WorkOS → Okta/Entra/Google Admin, pgvector → OpenSearch/Qdrant/Pinecone, or one model → another (a route edit on the `ModelGateway` CR) is a one-file change.
 
 ## How It Works
 
@@ -19,13 +19,13 @@ Slack event ─► rate-limit (Redis) ─► identity (Slack users.info → Work
                               load per-user OAuth tokens (DDB + KMS)
                                             │
                                             ▼
-              embed query (Bedrock Titan) ──► hybrid k-NN+BM25 search (pgvector / swappable)
+              embed query (gateway → Titan) ──► hybrid k-NN+BM25 search (pgvector / swappable)
                                             │
                                             ▼
            per-user ACL verify (Notion/Confluence/Drive) — fail-secure
                                             │
                                             ▼
-           generate answer (Bedrock Claude Sonnet 5) → Block Kit reply
+           generate answer (gateway → Claude Sonnet 5) → Block Kit reply
                                             │
                                             ▼
                   audit event → SQS → audit-consumer (KEDA) → DDB+S3
@@ -43,7 +43,7 @@ Every module that touches an external boundary exposes a `createXxx(deps)` facto
 - **src/identity/** — `createWorkOSResolver({fetchImpl, ddbClient, workosApiKey, workosDirectoryId, ...})` maps Slack user → workforce-directory user via WorkOS Directory Sync, cached in DDB (1h TTL). The raw directory-API access (Bearer auth, `limit=100` cursor pagination, client-side email matching, bounded `maxPages`) is the vendored `src/vendor/runtime/workos-directory.ts` client; the resolver wraps the injected fetch with `AbortSignal.timeout` before handing it to the client's fetch port and owns the DDB cache + fail-soft (log + null) contract. Bearer-API-key auth means no service-token refresh, no L2 cache.
 - **src/oauth/** — SlackKnowledgeBot's adoption of the `slack-knowledge-bot-oauth` package (scaffolded into `packages/oauth/` from the nanohype `module-oauth-delegation` template). `createSlackKnowledgeBotOAuth({auditLogger, ...})` builds the OAuth router with Notion/Atlassian/Google providers + DDB+KMS storage + a `RevocationEmitter` that lands in the audit pipeline. `url-token.ts` signs and verifies the short-lived OAuth `/start` URLs handed to users in Slack. `http.ts` bridges node:http ↔ Web-standard Request/Response so the module's framework-neutral handlers can live on SlackKnowledgeBot's existing HTTP server.
 - **src/connectors/** — `createAclGuard({fetchImpl, onCounter})` verifies access per source (Notion/Confluence/Drive) using a `getAccessToken` callback (supplied by the query handler as `oauth.getValidToken`). Per-source probes live in `notion.ts`/`confluence.ts`/`drive.ts` behind a `ConnectorVerifier` registry; each probe receives the injected `fetchImpl` so tests pass `vi.fn<typeof fetch>()`. Every source gets its own circuit breaker (`failureThreshold: 5`, `windowMs: 60s`, `halfOpenAfterMs: 30s`); when a breaker trips we emit `slack_knowledge_bot_circuit_open_total{source}` once and short-circuit to `wasRedacted=true` until the cooldown elapses. Fail-secure: missing token, 403, 404, timeout, network error, or open breaker → `wasRedacted=true`.
-- **src/rag/** — `createRetriever({backend, bedrock, embeddingModelId, onCounter})` runs k-NN (Bedrock Titan embeddings) + BM25 against a narrow `RetrievalBackend` port (null, pgvector, or a custom adapter) and fuses via Reciprocal Rank Fusion (`rrfFusion` is a pure export, covered directly). The retrieval backend (k-NN + BM25) is wrapped in one breaker (`source: "retrieval"`); when tripped we log a warn and return empty hits — the generator handles empty context gracefully. Embeddings (Bedrock Titan) are deliberately not on the same breaker (Bedrock has its own retry). `createGenerator({bedrock, llmModelId, staleThresholdDays, ...})` calls Claude Sonnet 5 via Bedrock with a strict system prompt and the verified-accessible documents.
+- **src/rag/** — `createRetriever({backend, gatewayEndpoint, embeddingRoute, embeddingDimensions, onCounter})` runs k-NN (Titan embeddings through the gateway's embeddings route) + BM25 against a narrow `RetrievalBackend` port (null, pgvector, or a custom adapter) and fuses via Reciprocal Rank Fusion (`rrfFusion` is a pure export, covered directly). The retrieval backend (k-NN + BM25) is wrapped in one breaker (`source: "retrieval"`); when tripped we log a warn and return empty hits — the generator handles empty context gracefully. Embeddings (Bedrock Titan) are deliberately not on the same breaker (Bedrock has its own retry). `createGenerator({model, llmRoute, staleThresholdDays, ...})` calls Claude through the gateway with a strict system prompt and the verified-accessible documents.
 - **src/audit/** — `createAuditLogger({sqs, queueUrl, dlqUrl, ...})` builds and emits audit events to SQS (at-least-once → DLQ → `AuditTotalLoss` metric). Discriminated `AuditEvent = QueryAuditEvent | RevocationAuditEvent` union. `buildQueryAuditEvent` is a pure helper, covered directly. `pii-scrubber.ts` is the scrubbing seam at the boundary; it applies the org-wide union PII catalog from the vendored `src/vendor/runtime/pii.ts` (secrets/tokens, SSN/cards, compensation, HR/HR-case, health, DOB, contact info, AWS accounts, customer/infrastructure ids). `audit-consumer.ts` is the SQS-drain side — long-poll receive, regex-validate, write to DynamoDB (90d TTL) + S3 (1y lifecycle), delete on success. Port-injected (SQSClient + DynamoDBClient + S3Client + queue URL + table/bucket names + shouldStop callback). Runs as the KEDA-scaled audit-consumer Deployment (see below).
 - **src/bin/audit-consumer.ts** — Entry binary for the audit consumer Deployment. Constructs the SQS/DDB/S3 clients with explicit per-request timeouts via `NodeHttpHandler`, starts a tiny `node:http` health server on PORT (default 3001), and runs `runAuditConsumer` until SIGTERM. The chart's `audit-consumer-deployment.yaml` runs `node dist/bin/audit-consumer.js`; KEDA scales the Deployment on audit queue depth via `audit-consumer-scaledobject.yaml`.
 - **src/ratelimit/** — `createRateLimiter({redis, userPerHour, workspacePerHour})` is a Redis sliding-window limiter (per-user + per-workspace). Multiple replicas require shared state; in-memory Maps would multiply the limit by replica count. Fails open if Redis is unreachable.
@@ -116,7 +116,7 @@ All config via env vars, validated by Zod in `src/config/index.ts`. Copy `.env.e
 - **OAuth delegation**: `STATE_SIGNING_SECRET` (≥ 32 bytes — HMACs both the module's state cookie and SlackKnowledgeBot's signed `/start` URL tokens)
 - **App**: `APP_BASE_URL`
 
-Defaults: `AWS_REGION=us-west-2`, `BEDROCK_REGION=us-west-2`, `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-5` (cross-region inference profile — the bare `anthropic.…` ID is not invocable on-demand), `BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0`, `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `PG_SSL_REJECT_UNAUTHORIZED=true` (verifies the Aurora cert against the bundled RDS global CA at `certs/rds-global-bundle.pem`; set `false` for a chain-less local Postgres), `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`, `NODE_ENV=development`.
+Defaults: `AWS_REGION=us-west-2`, `MODEL_ROUTE=default`, `EMBEDDING_ROUTE=embeddings` (route names on the Platform's ModelGateway, not model ids — the CR maps them to `us.anthropic.claude-sonnet-5` and `amazon.titan-embed-text-v2:0`), `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `PG_SSL_REJECT_UNAUTHORIZED=true` (verifies the Aurora cert against the bundled RDS global CA at `certs/rds-global-bundle.pem`; set `false` for a chain-less local Postgres), `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`, `NODE_ENV=development`.
 
 App-level secrets in deployment live in AWS Secrets Manager at `slack-knowledge-bot/{env}/app-secrets`. Per-user OAuth tokens live in DynamoDB with KMS envelope encryption — NOT in Secrets Manager (per-user secrets would cost ~$4k/month at 10k users vs ~$10/month for DDB+KMS).
 
@@ -166,7 +166,7 @@ When adding tests: accept the SDK client as a typed dep on the source-side facto
 
 ## Dependencies
 
-- **`@aws-sdk/client-bedrock-runtime`** — Bedrock Claude (LLM) + Titan (embeddings); on-account inference, no source content to third parties
+- **`@anthropic-ai/sdk`** — the Messages client, pointed at the Platform's ModelGateway. Claude and Titan both run on Bedrock behind it; the app holds no model credential, and no source content reaches a third party
 - **`@aws-sdk/client-dynamodb`** — token store, identity cache, audit log
 - **`@opentelemetry/api`** + **`@opentelemetry/auto-instrumentations-node`** — OTel traces/metrics (histograms + counters); the `--require` hook in the Dockerfile auto-instruments http/fetch/aws-sdk/pg before user code
 - **`@aws-sdk/client-kms`** — token envelope encryption

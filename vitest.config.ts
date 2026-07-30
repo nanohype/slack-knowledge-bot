@@ -2,6 +2,12 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // MODEL_GATEWAY_ENDPOINT has no default in config, by design: the operator
+    // derives it from the Platform name, so there is no sensible one to guess.
+    // Supplied here so every suite that loads the config can start.
+    env: {
+      MODEL_GATEWAY_ENDPOINT: "http://gw.tenants-x.svc.cluster.local:8080",
+    },
     globals: true,
     environment: "node",
     // evals/*.test.ts is the offline half of the eval tier — fixture

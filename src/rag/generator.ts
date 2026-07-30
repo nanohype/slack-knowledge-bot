@@ -4,7 +4,7 @@
  * All inference on the deploying account. No source content to
  * third-party providers.
  *
- * Port-injected: takes a `BedrockRuntimeClient` and the model IDs + stale
+ * Port-injected: takes an Anthropic Messages client and the route + stale
  * threshold as config. Tests build a stubbed Bedrock via
  * `aws-sdk-client-mock` and check the outgoing InvokeModel shape.
  *
@@ -15,7 +15,7 @@
  * caller. Fencing does not force refusal; evals/rag.eval.ts measures
  * whether the model holds the line on these prompts.
  */
-import { type BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { RetrievalHit, SourceCitation } from "../connectors/types.js";
 import { logger } from "../logger.js";
@@ -24,9 +24,11 @@ import { fenceUntrusted, normalizeDelimiters } from "../vendor/runtime/guardrail
 const LLM_TIMEOUT_MS = 30000;
 
 const CompletionResponseSchema = z.object({
-  content: z.array(z.object({ text: z.string() })).min(1, "Bedrock returned empty content array"),
-  // Claude-on-Bedrock returns token accounting; metered so the AI path's cost
-  // is observable per-query and in aggregate (cache_read reflects the
+  content: z
+    .array(z.object({ type: z.string(), text: z.string().optional() }))
+    .min(1, "the model gateway returned an empty content array"),
+  // The response carries token accounting; metered so the AI path's cost is
+  // observable per-query and in aggregate (cache_read reflects the
   // system-prompt cache breakpoint above). Optional — absent on error shapes.
   usage: z
     .object({
@@ -57,8 +59,10 @@ export interface GenerateAnswerResult {
 }
 
 export interface GeneratorConfig {
-  bedrock: BedrockRuntimeClient;
-  llmModelId: string;
+  /** An Anthropic Messages client pointed at the Platform's ModelGateway. */
+  model: Anthropic;
+  /** A route on that gateway, not a model id. */
+  llmRoute: string;
   staleThresholdDays: number;
   now?: () => number;
   onCounter?: (metric: string, value?: number) => void;
@@ -112,41 +116,46 @@ export function createGenerator(deps: GeneratorConfig): Generator {
 
       const llmStart = now();
       try {
-        const response = await deps.bedrock.send(
-          new InvokeModelCommand({
-            modelId: deps.llmModelId,
-            contentType: "application/json",
-            accept: "application/json",
-            body: JSON.stringify({
-              anthropic_version: "bedrock-2023-05-31",
-              max_tokens: 1024,
-              // No temperature: Sonnet 5 rejects the knob
-              // ("`temperature` is deprecated for this model"). Default
-              // sampling is what production gets; there is no dial to pin a
-              // run down with — one reason capability is scored as a rate.
-              // Prompt-cache breakpoint on the stable system prefix: it's the same
-              // text on every query, so we mark it ephemeral-cacheable. The per-query
-              // [CONTEXT]/[QUESTION] user turn stays after the breakpoint, uncached.
-              system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-              messages: [
-                {
-                  role: "user",
-                  content: userContent,
-                },
-              ],
-            }),
-          }),
-          { abortSignal: AbortSignal.timeout(LLM_TIMEOUT_MS) },
+        const response = await deps.model.messages.create(
+          {
+            model: deps.llmRoute,
+            max_tokens: 1024,
+            // No temperature: Sonnet 5 rejects the knob
+            // ("`temperature` is deprecated for this model"). Default
+            // sampling is what production gets; there is no dial to pin a
+            // run down with — one reason capability is scored as a rate.
+            //
+            // anthropic_version is absent by design: the AIServiceBackend
+            // stamps the Bedrock API version, so sending one here would pin a
+            // protocol detail this app no longer owns.
+            //
+            // Prompt-cache breakpoint on the stable system prefix: it's the same
+            // text on every query, so we mark it ephemeral-cacheable. The per-query
+            // [CONTEXT]/[QUESTION] user turn stays after the breakpoint, uncached.
+            system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+            messages: [
+              {
+                role: "user",
+                content: userContent,
+              },
+            ],
+          },
+          { timeout: LLM_TIMEOUT_MS },
         );
         timing("llm.latency_ms", now() - llmStart);
-        const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
-        const parsed = CompletionResponseSchema.parse(raw);
+        const parsed = CompletionResponseSchema.parse(response);
         const usage = parsed.usage;
         if (usage?.input_tokens != null) counter("llm.input_tokens", usage.input_tokens);
         if (usage?.output_tokens != null) counter("llm.output_tokens", usage.output_tokens);
         if (usage?.cache_read_input_tokens != null)
           counter("llm.cache_read_tokens", usage.cache_read_input_tokens);
-        const answerText: string = parsed.content[0].text;
+        // The content array is a union of block kinds, so the text block is
+        // found rather than assumed to be first — a response carrying none
+        // would otherwise put `undefined` into an answer sent to Slack.
+        const answerText = parsed.content.find((b) => b.type === "text")?.text;
+        if (answerText === undefined) {
+          throw new Error("the model gateway returned a response with no text block");
+        }
         const seen = new Set<string>();
         const citations: SourceCitation[] = accessibleHits
           .filter((hit) => {
@@ -167,7 +176,7 @@ export function createGenerator(deps: GeneratorConfig): Generator {
       } catch (err) {
         counter("llm.error");
         timing("llm.latency_ms", now() - llmStart);
-        logger.error({ err, question: question.slice(0, 50) }, "Bedrock LLM call failed");
+        logger.error({ err, question: question.slice(0, 50) }, "model gateway LLM call failed");
         return {
           answerText: "I'm having trouble generating an answer right now. Please try again.",
           citations: [],

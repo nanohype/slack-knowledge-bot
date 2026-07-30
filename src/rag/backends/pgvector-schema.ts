@@ -1,4 +1,13 @@
 /**
+ * The Titan v2 embedding width, and therefore the width of the pgvector column.
+ *
+ * Declared here because this is the module that creates the column: the seeder,
+ * the runtime backend and the embeddings route all have to agree on one number,
+ * and a second copy is a chance for them to disagree.
+ */
+export const TITAN_EMBEDDING_DIM = 1024;
+
+/**
  * Idempotent schema bootstrap for the pgvector retrieval backend.
  *
  * Called once from `src/index.ts` on app start. Every statement is

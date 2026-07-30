@@ -1,4 +1,4 @@
-import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createGenerator } from "../src/rag/generator.js";
 import { type GradeResult, grade, loadSuite, score, toHits } from "./harness.js";
@@ -16,9 +16,11 @@ import { type GradeResult, grade, loadSuite, score, toHits } from "./harness.js"
 const suite = loadSuite("rag.json");
 const configured = (process.env.EVAL_LLM ?? "").trim();
 
-const MODEL_ID =
-  process.env.EVAL_MODEL || process.env.BEDROCK_LLM_MODEL_ID || "us.anthropic.claude-sonnet-5";
-const REGION = process.env.AWS_REGION || process.env.BEDROCK_REGION || "us-west-2";
+// The generator names a route; the gateway decides which model it resolves to.
+// Grading the route production uses is the point — a direct backend would score
+// a configuration no environment deploys.
+const ROUTE = process.env.EVAL_MODEL_ROUTE || "default";
+const GATEWAY = process.env.MODEL_GATEWAY_ENDPOINT ?? "";
 // Match production default so stale cases exercise the real threshold.
 const STALE_THRESHOLD_DAYS = Number(process.env.STALE_DOC_THRESHOLD_DAYS ?? 90);
 
@@ -26,17 +28,30 @@ describe.skipIf(configured === "")(`eval: ${suite.name}`, () => {
   const results = new Map<string, GradeResult>();
 
   beforeAll(async () => {
-    if (configured !== "bedrock") {
+    if (GATEWAY === "") {
+      // Checked once here: without it every case fails with the same connection
+      // error, which reads as the model failing rather than as missing config.
       throw new Error(
-        `EVAL_LLM="${configured}" is not supported here — this generator speaks ` +
-          `Bedrock InvokeModel directly. Use EVAL_LLM=bedrock, or unset it to skip ` +
+        'EVAL_LLM="gateway" requires MODEL_GATEWAY_ENDPOINT — the base URL of a reachable ' +
+          "ModelGateway. In cluster that is the operator-published endpoint; outside it, run " +
+          "upstream's standalone `aigw` and point at that.",
+      );
+    }
+    if (configured !== "gateway") {
+      throw new Error(
+        `EVAL_LLM="${configured}" is not supported here — this generator speaks the ` +
+          `Anthropic Messages API to a ModelGateway. Use EVAL_LLM=gateway, or unset it to skip ` +
           `the model tier.`,
       );
     }
 
     const generator = createGenerator({
-      bedrock: new BedrockRuntimeClient({ region: REGION }),
-      llmModelId: MODEL_ID,
+      model: new Anthropic({
+        baseURL: GATEWAY,
+        // The gateway holds the AWS credential; the eval holds none.
+        apiKey: "unused-the-gateway-holds-the-credential",
+      }),
+      llmRoute: ROUTE,
       staleThresholdDays: STALE_THRESHOLD_DAYS,
     });
 

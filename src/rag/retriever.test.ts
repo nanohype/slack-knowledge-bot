@@ -1,11 +1,31 @@
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { mockClient } from "aws-sdk-client-mock";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RetrievalHit } from "../connectors/types.js";
 import type { RetrievalBackend } from "./backends/types.js";
 import { createRetriever, rrfFusion } from "./retriever.js";
 
-const bedrockMock = mockClient(BedrockRuntimeClient);
+const GATEWAY = "http://gw.tenants-x.svc.cluster.local:8080";
+const DIM = 3;
+
+/**
+ * Stubs the embeddings endpoint at `fetch`, so the gateway helper's own request
+ * building, parsing and width check all run for real — only the response is faked.
+ */
+const fetchMock = vi.fn();
+
+/** Route config shared by every retriever built here. */
+const MODEL_DEPS = {
+  fetchImpl: fetchMock as unknown as typeof fetch,
+  gatewayEndpoint: GATEWAY,
+  embeddingRoute: "embeddings",
+  embeddingDimensions: DIM,
+};
+
+function embeddingsRespond(embedding: number[]) {
+  fetchMock.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: [{ embedding }] }),
+  });
+}
 
 function baseHit(overrides: Partial<RetrievalHit> = {}): RetrievalHit {
   return {
@@ -32,25 +52,52 @@ function fakeBackend(
 }
 
 describe("createRetriever — embedQuery", () => {
-  beforeEach(() => bedrockMock.reset());
-
-  it("invokes Bedrock with the configured embedding model and returns the vector", async () => {
-    bedrockMock.on(InvokeModelCommand).resolves({
-      body: new TextEncoder().encode(JSON.stringify({ embedding: [0.1, 0.2, 0.3] })),
-    } as never);
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+  it("embeds through the gateway's embeddings route and returns the vector", async () => {
+    embeddingsRespond([0.1, 0.2, 0.3]);
     const { backend } = fakeBackend([], []);
-    const retriever = createRetriever({
-      backend,
-      bedrock: new BedrockRuntimeClient({}),
-      embeddingModelId: "titan-v2",
-    });
+    const retriever = createRetriever({ backend, ...MODEL_DEPS });
+
     const vec = await retriever.embedQuery("hello");
+
     expect(vec).toEqual([0.1, 0.2, 0.3]);
-    const calls = bedrockMock.commandCalls(InvokeModelCommand);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].args[0].input.modelId).toBe("titan-v2");
-    const body = JSON.parse(calls[0].args[0].input.body as string);
-    expect(body).toEqual({ inputText: "hello" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${GATEWAY}/v1/embeddings`);
+    const body = JSON.parse(init.body as string);
+    // A route name, not a model id — the gateway rewrites it to Titan upstream.
+    // `dimensions` has to travel: the pgvector column is declared at that width,
+    // and the gateway forwards it to Titan.
+    expect(body).toEqual({ model: "embeddings", input: "hello", dimensions: DIM });
+  });
+
+  it("refuses a vector whose width does not match the pgvector column", async () => {
+    // pgvector rejects a wrong-width vector at insert, far from the cause. A
+    // route repointed at a model with a different output size is exactly how
+    // that happens, so it fails at the call instead.
+    embeddingsRespond([0.1, 0.2]);
+    const { backend } = fakeBackend([], []);
+    const retriever = createRetriever({ backend, ...MODEL_DEPS });
+
+    await expect(retriever.embedQuery("hello")).rejects.toThrow(/2-dimension vector, expected 3/);
+  });
+
+  it("surfaces the gateway's error body rather than a bare status", async () => {
+    // The gateway reports a translation refusal — an unmatched route, a batch it
+    // will not accept — in the body. Without it those are indistinguishable
+    // from an upstream model failure.
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      text: async () => "no matching route for model=embeddings",
+    });
+    const { backend } = fakeBackend([], []);
+    const retriever = createRetriever({ backend, ...MODEL_DEPS });
+
+    await expect(retriever.embedQuery("hello")).rejects.toThrow(/no matching route/);
   });
 });
 
@@ -62,8 +109,7 @@ describe("createRetriever — hybridSearch", () => {
     );
     const retriever = createRetriever({
       backend,
-      bedrock: new BedrockRuntimeClient({}),
-      embeddingModelId: "titan-v2",
+      ...MODEL_DEPS,
     });
 
     const hits = await retriever.hybridSearch("q", [0.1, 0.2]);
@@ -80,8 +126,7 @@ describe("createRetriever — hybridSearch", () => {
     const { backend } = fakeBackend([], []);
     const retriever = createRetriever({
       backend,
-      bedrock: new BedrockRuntimeClient({}),
-      embeddingModelId: "titan-v2",
+      ...MODEL_DEPS,
     });
     expect(await retriever.hybridSearch("q", [0, 1, 0])).toEqual([]);
   });
@@ -97,8 +142,7 @@ describe("createRetriever — hybridSearch", () => {
     const onCounter = vi.fn();
     const retriever = createRetriever({
       backend,
-      bedrock: new BedrockRuntimeClient({}),
-      embeddingModelId: "titan-v2",
+      ...MODEL_DEPS,
       onCounter,
     });
 
