@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import http from "node:http";
-import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+import Anthropic from "@anthropic-ai/sdk";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SQSClient } from "@aws-sdk/client-sqs";
 import { App } from "@slack/bolt";
@@ -28,7 +28,7 @@ import { createSlackKnowledgeBotOAuth, SOURCE_TO_PROVIDER } from "./oauth/router
 import { signOAuthStartUrl } from "./oauth/url-token.js";
 import { createNullBackend } from "./rag/backends/null.js";
 import { createPgvectorBackend } from "./rag/backends/pgvector.js";
-import { initSchema } from "./rag/backends/pgvector-schema.js";
+import { initSchema, TITAN_EMBEDDING_DIM } from "./rag/backends/pgvector-schema.js";
 import type { RetrievalBackend } from "./rag/backends/types.js";
 import { createGenerator } from "./rag/generator.js";
 import { createRetriever } from "./rag/retriever.js";
@@ -36,8 +36,6 @@ import { createRateLimiter } from "./ratelimit/redis-limiter.js";
 import { getRedis } from "./redis.js";
 import { createDisconnectCommand } from "./slack/disconnect-command.js";
 import { createQueryHandler } from "./slack/query-handler.js";
-
-const TITAN_EMBEDDING_DIM = 1024;
 
 const redis = getRedis();
 const sqs = new SQSClient({
@@ -48,15 +46,18 @@ const ddb = new DynamoDBClient({
   region: config.AWS_REGION,
   requestHandler: new NodeHttpHandler({ requestTimeout: 5000, connectionTimeout: 1000 }),
 });
-const bedrock = new BedrockRuntimeClient({
-  region: config.BEDROCK_REGION,
-  // SDK-layer timeouts backstop the application-level AbortSignal.timeout in
-  // retriever/generator. A stalled TCP connection that never errors would
-  // otherwise hold the Bolt handler slot until Node's default socket timeout.
-  requestHandler: new NodeHttpHandler({
-    requestTimeout: 35_000,
-    connectionTimeout: 2_000,
-  }),
+// Every model call goes through the Platform's ModelGateway. It holds the AWS
+// identity, applies each route's guardrail, and records the request — this app
+// holds no model credential.
+const model = new Anthropic({
+  baseURL: config.MODEL_GATEWAY_ENDPOINT,
+  // The gateway authenticates to Bedrock with its own Pod Identity credentials.
+  // The SDK requires the field; the gateway ignores it.
+  apiKey: "unused-the-gateway-holds-the-credential",
+  // Backstops the per-call timeout in the generator. A stalled connection that
+  // never errors would otherwise hold the Bolt handler slot until Node's
+  // default socket timeout.
+  timeout: 35_000,
 });
 
 // Retrieval backend — scheme-dispatched from a single URL.
@@ -159,15 +160,16 @@ const rateLimiter = createRateLimiter({
 
 const retriever = createRetriever({
   backend: retrievalBackend,
-  bedrock,
-  embeddingModelId: config.BEDROCK_EMBEDDING_MODEL_ID,
+  gatewayEndpoint: config.MODEL_GATEWAY_ENDPOINT,
+  embeddingRoute: config.EMBEDDING_ROUTE,
+  embeddingDimensions: TITAN_EMBEDDING_DIM,
   onTiming: timing,
   onCounter: counter,
 });
 
 const generator = createGenerator({
-  bedrock,
-  llmModelId: config.BEDROCK_LLM_MODEL_ID,
+  model,
+  llmRoute: config.MODEL_ROUTE,
   staleThresholdDays: config.STALE_DOC_THRESHOLD_DAYS,
   onCounter: counter,
   onTiming: timing,

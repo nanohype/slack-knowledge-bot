@@ -8,6 +8,12 @@ import { defineConfig } from "vitest/config";
 // No coverage block: an eval measures a model, not lines of this repo.
 export default defineConfig({
   test: {
+    // MODEL_GATEWAY_ENDPOINT has no default in config, by design: the operator
+    // derives it from the Platform name, so there is no sensible one to guess.
+    // Supplied here so every suite that loads the config can start.
+    env: {
+      MODEL_GATEWAY_ENDPOINT: "http://gw.tenants-x.svc.cluster.local:8080",
+    },
     environment: "node",
     include: ["evals/**/*.eval.ts"],
     // Generator imports logger → config, which Zod-parses process.env at

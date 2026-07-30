@@ -245,12 +245,15 @@ networkPolicy:
 env:
   # Non-secret configuration. Secrets come through the ExternalSecret.
   AWS_REGION: us-west-2
-  BEDROCK_REGION: us-west-2
-  # Claude Sonnet 5 is reachable only via the cross-region inference profile
-  # (us.anthropic.…); the bare ID returns "on-demand throughput isn't supported".
-  # Must match the Zod default in src/config/index.ts.
-  BEDROCK_LLM_MODEL_ID: us.anthropic.claude-sonnet-5
-  BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+  # The Platform's ModelGateway. The operator derives this from the Platform name
+  # and publishes it on ModelGateway.status.endpoint; the app holds no AWS model
+  # credential and reaches Bedrock only through here.
+  MODEL_GATEWAY_ENDPOINT: http://slack-knowledge-bot-gateway.tenants-slack-knowledge-bot.svc.cluster.local:8080
+  # Route names on that gateway, not model ids. The ModelGateway CR maps them to
+  # Claude and Titan — including the `us.` cross-region inference profile the
+  # Claude family requires, which now lives in the CR rather than here.
+  MODEL_ROUTE: default
+  EMBEDDING_ROUTE: embeddings
   # Verify the Aurora server cert against the RDS global CA baked into the image
   # (certs/rds-global-bundle.pem). Authenticated-encrypted DB link, not just
   # encrypted. Override to "false" only for a chain-less local Postgres.

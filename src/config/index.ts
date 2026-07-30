@@ -46,14 +46,22 @@ const ConfigSchema = z.object({
   KMS_KEY_ID: z.string().min(1),
   REDIS_URL: z.string(),
 
-  // Bedrock
-  BEDROCK_REGION: z.string().default("us-west-2"),
-  // Claude Sonnet 5 is only reachable via a cross-region inference
-  // profile (`us.anthropic.…`); invoking the bare model ID returns
-  // `Invocation … with on-demand throughput isn't supported`. Override
-  // via env if you want to pin a region-specific profile.
-  BEDROCK_LLM_MODEL_ID: z.string().default("us.anthropic.claude-sonnet-5"),
-  BEDROCK_EMBEDDING_MODEL_ID: z.string().default("amazon.titan-embed-text-v2:0"),
+  // The model plane. Every model call goes through the Platform's ModelGateway,
+  // which holds the AWS identity, applies each route's guardrail, and records
+  // the request. This app holds no model credential.
+  MODEL_GATEWAY_ENDPOINT: z
+    .string()
+    .url()
+    // .url() alone accepts `host:8080` as a URL whose scheme is `host:`, which
+    // the client would only fail on at request time.
+    .refine((v) => /^https?:\/\//.test(v), {
+      message: "MODEL_GATEWAY_ENDPOINT must be an http(s) URL",
+    }),
+  // Route names on that gateway, not model ids. The ModelGateway CR maps them
+  // to Claude and Titan — including the `us.` cross-region inference profile
+  // the Claude family requires, which now lives in the CR rather than here.
+  MODEL_ROUTE: z.string().min(1).default("default"),
+  EMBEDDING_ROUTE: z.string().min(1).default("embeddings"),
 
   // WorkOS (workforce identity — Directory Sync via SCIM)
   WORKOS_API_KEY: z.string(),

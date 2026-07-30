@@ -487,7 +487,7 @@ ValidationException: Invocation of model ID anthropic.claude-sonnet-5 with on-de
 
 **Root cause:** Claude Sonnet 5 is only reachable via a cross-region inference profile; the bare foundation-model ID doesn't work.
 
-**Fix:** `BEDROCK_LLM_MODEL_ID=us.anthropic.claude-sonnet-5`. This is already the default in `src/config/index.ts` — if you see this error, check the pod's env for an override (`kubectl -n tenants-slack-knowledge-bot exec deploy/slack-knowledge-bot -- printenv BEDROCK_LLM_MODEL_ID`) and remove it from chart values.
+**Fix:** the route's `crossRegionProfile` on the `ModelGateway` CR must be `us.anthropic.claude-sonnet-5`. The app names a route, not a model, so check the CR rather than the pod env: `kubectl -n tenants-workplace get modelgateway slack-knowledge-bot -o yaml`.
 
 ---
 

@@ -8,13 +8,13 @@
  * RetrievalBackend, aws-sdk-client-mock for Bedrock + SQS + DDB).
  */
 
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+import type Anthropic from "@anthropic-ai/sdk";
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { AllMiddlewareArgs, App, SayFn } from "@slack/bolt";
 import { mockClient } from "aws-sdk-client-mock";
 import type { OAuthRouter, TokenStorage } from "slack-knowledge-bot-oauth";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuditLogger } from "../audit/audit-logger.js";
 import { createAclGuard } from "../connectors/acl-guard.js";
 import type { RetrievalHit } from "../connectors/types.js";
@@ -28,7 +28,16 @@ import { createQueryHandler } from "./query-handler.js";
 type BoltClient = AllMiddlewareArgs["client"];
 
 const ddbMock = mockClient(DynamoDBClient);
-const bedrockMock = mockClient(BedrockRuntimeClient);
+const GATEWAY = "http://gw.tenants-x.svc.cluster.local:8080";
+
+/**
+ * The model plane, faked at two seams: the embeddings route goes over `fetch`,
+ * the Messages route through the injected client. Both the gateway helper's
+ * parsing and the generator's own request building still run for real.
+ */
+const embeddingsFetch = vi.fn();
+const messagesCreate = vi.fn();
+const model = { messages: { create: messagesCreate } } as unknown as Anthropic;
 const sqsMock = mockClient(SQSClient);
 
 const SOURCE_TO_PROVIDER = {
@@ -46,8 +55,11 @@ function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Resp
   });
 }
 
-function bedrockBody(payload: unknown): never {
-  return { body: new TextEncoder().encode(JSON.stringify(payload)) } as never;
+function embeddingsRespond(embedding: number[]) {
+  embeddingsFetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: [{ embedding }] }),
+  });
 }
 
 function fakeRedisUnderLimit() {
@@ -162,12 +174,13 @@ function buildDeps(overrides: {
   });
   const retriever = createRetriever({
     backend,
-    bedrock: new BedrockRuntimeClient({}),
-    embeddingModelId: "titan",
+    gatewayEndpoint: GATEWAY,
+    embeddingRoute: "embeddings",
+    embeddingDimensions: 2,
   });
   const generator = createGenerator({
-    bedrock: new BedrockRuntimeClient({}),
-    llmModelId: "claude",
+    model,
+    llmRoute: "default",
     staleThresholdDays: 90,
     now: () => NOW,
   });
@@ -205,9 +218,13 @@ function makeSay(): { say: SayFn; calls: Parameters<SayFn>[0][] } {
 describe("query pipeline integration", () => {
   beforeEach(() => {
     ddbMock.reset();
-    bedrockMock.reset();
+    embeddingsFetch.mockReset();
+    messagesCreate.mockReset();
+    vi.stubGlobal("fetch", embeddingsFetch);
     sqsMock.reset();
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("happy path: rate-limit allow → Slack email → directory resolve → retrieve → ACL grant → generate → audit", async () => {
     ddbMock.on(GetItemCommand).resolves({
@@ -218,10 +235,8 @@ describe("query pipeline integration", () => {
         ttl: { N: String(Math.floor(NOW / 1000) + 600) },
       },
     });
-    bedrockMock
-      .on(InvokeModelCommand)
-      .resolvesOnce(bedrockBody({ embedding: [0.1, 0.2] }))
-      .resolvesOnce(bedrockBody({ content: [{ text: "Answer." }] }));
+    embeddingsRespond([0.1, 0.2]);
+    messagesCreate.mockResolvedValue({ content: [{ type: "text", text: "Answer." }] });
     sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
 
     const probeFetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
@@ -286,7 +301,8 @@ describe("query pipeline integration", () => {
 
     expect(calls).toHaveLength(1);
     expect(JSON.stringify(calls[0])).toMatch(/query limit|per hour|queries\/hour/i);
-    expect(bedrockMock.commandCalls(InvokeModelCommand)).toHaveLength(0);
+    expect(embeddingsFetch).not.toHaveBeenCalled();
+    expect(messagesCreate).not.toHaveBeenCalled();
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
   });
 
@@ -303,7 +319,8 @@ describe("query pipeline integration", () => {
     });
 
     expect(JSON.stringify(calls[0])).toContain("Slack profile email");
-    expect(bedrockMock.commandCalls(InvokeModelCommand)).toHaveLength(0);
+    expect(embeddingsFetch).not.toHaveBeenCalled();
+    expect(messagesCreate).not.toHaveBeenCalled();
   });
 
   it("identity failure: WorkOS returns no directory user, replies with identity error", async () => {
@@ -351,7 +368,8 @@ describe("query pipeline integration", () => {
     expect(body).toContain("t=sig-user-1-notion");
     expect(body).toContain("t=sig-user-1-atlassian");
     expect(body).toContain("t=sig-user-1-google");
-    expect(bedrockMock.commandCalls(InvokeModelCommand)).toHaveLength(0);
+    expect(embeddingsFetch).not.toHaveBeenCalled();
+    expect(messagesCreate).not.toHaveBeenCalled();
   });
 
   it("ACL redaction: a 403 on one source produces a redaction notice but the answer still emits", async () => {
@@ -363,10 +381,8 @@ describe("query pipeline integration", () => {
         ttl: { N: String(Math.floor(NOW / 1000) + 600) },
       },
     });
-    bedrockMock
-      .on(InvokeModelCommand)
-      .resolvesOnce(bedrockBody({ embedding: [0.1] }))
-      .resolvesOnce(bedrockBody({ content: [{ text: "ok" }] }));
+    embeddingsRespond([0.1, 0.2]);
+    messagesCreate.mockResolvedValue({ content: [{ type: "text", text: "ok" }] });
     sqsMock.on(SendMessageCommand).resolves({ MessageId: "m-1" });
 
     const probeFetch = vi.fn(async (input: string | URL | Request) => {
@@ -414,9 +430,13 @@ describe("query pipeline integration", () => {
 describe("query handler lifecycle (registration + graceful drain)", () => {
   beforeEach(() => {
     ddbMock.reset();
-    bedrockMock.reset();
+    embeddingsFetch.mockReset();
+    messagesCreate.mockReset();
+    vi.stubGlobal("fetch", embeddingsFetch);
     sqsMock.reset();
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   // Capture the listeners registerWith() hands to Bolt so we can drive them
   // directly — the same wrappers that feed the in-flight set.

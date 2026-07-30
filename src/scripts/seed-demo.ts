@@ -15,8 +15,9 @@
  */
 
 import { readFileSync } from "node:fs";
-import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { Pool } from "pg";
+import { TITAN_EMBEDDING_DIM } from "../rag/backends/pgvector-schema.js";
+import { embedViaGateway } from "../rag/gateway-embeddings.js";
 
 // Mirror src/index.ts: verify the RDS server cert against the bundled global CA
 // by default; PG_SSL_REJECT_UNAUTHORIZED=false relaxes it for local Postgres.
@@ -114,24 +115,18 @@ function assertNoPlaceholders(): void {
   }
 }
 
-async function embed(
-  bedrock: BedrockRuntimeClient,
-  modelId: string,
-  text: string,
-): Promise<number[]> {
-  const res = await bedrock.send(
-    new InvokeModelCommand({
-      modelId,
-      body: JSON.stringify({ inputText: text }),
-      contentType: "application/json",
-      accept: "application/json",
-    }),
-    { abortSignal: AbortSignal.timeout(5000) },
-  );
-  const parsed = JSON.parse(new TextDecoder().decode(res.body)) as {
-    embedding: number[];
-  };
-  return parsed.embedding;
+/**
+ * Embeds through the same gateway route the running app uses, so seeded vectors
+ * and query vectors come from the same model. Seeding against a different one
+ * produces a store whose similarities are meaningless.
+ */
+async function embed(endpoint: string, route: string, text: string): Promise<number[]> {
+  return embedViaGateway(text, {
+    endpoint,
+    route,
+    timeoutMs: 5000,
+    dimensions: TITAN_EMBEDDING_DIM,
+  });
 }
 
 async function main(): Promise<void> {
@@ -146,10 +141,13 @@ async function main(): Promise<void> {
     );
   }
 
-  const modelId = process.env.BEDROCK_EMBEDDING_MODEL_ID ?? "amazon.titan-embed-text-v2:0";
-  const bedrock = new BedrockRuntimeClient({
-    region: process.env.BEDROCK_REGION ?? "us-west-2",
-  });
+  const gatewayEndpoint = process.env.MODEL_GATEWAY_ENDPOINT;
+  if (!gatewayEndpoint) {
+    throw new Error(
+      "seed-demo: MODEL_GATEWAY_ENDPOINT missing — run inside a pod, where the chart injects the Platform's ModelGateway endpoint.",
+    );
+  }
+  const embeddingRoute = process.env.EMBEDDING_ROUTE ?? "embeddings";
 
   const pool = new Pool({
     host,
@@ -163,9 +161,11 @@ async function main(): Promise<void> {
     max: 2,
   });
 
-  console.error(`[seed] embedding ${SEED_DOCS.length} docs via ${modelId}...`);
+  console.error(
+    `[seed] embedding ${SEED_DOCS.length} docs via the ${embeddingRoute} route on ${gatewayEndpoint}...`,
+  );
   for (const doc of SEED_DOCS) {
-    const vector = await embed(bedrock, modelId, `${doc.title}\n${doc.chunkText}`);
+    const vector = await embed(gatewayEndpoint, embeddingRoute, `${doc.title}\n${doc.chunkText}`);
     const literal = `[${vector.join(",")}]`;
     await pool.query(
       `INSERT INTO chunks (doc_id, chunk_index, source, source_url, title, chunk_text, last_modified, embedding)

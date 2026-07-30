@@ -99,8 +99,8 @@ spec:
     # IDs (bedrock-model-scoping inline policy over the baseline grant); the
     # entries match what the app's config invokes.
     allowedModels:
-      - us.anthropic.claude-sonnet-5 # BEDROCK_LLM_MODEL_ID — answer generation
-      - amazon.titan-embed-text-v2:0 # BEDROCK_EMBEDDING_MODEL_ID — query embeddings
+      - us.anthropic.claude-sonnet-5 # the `default` ModelGateway route — answer generation
+      - amazon.titan-embed-text-v2:0 # the `embeddings` ModelGateway route — query embeddings
     # Escape hatch for grants outside the datastore vocabulary. Nothing needs it:
     # DDB/SQS/S3 access rides spec.datastores, and the KMS token-store key is
     # granted by the operator from the per-tenant key tenant-substrate mints — no
@@ -148,3 +148,48 @@ spec:
     - name: events
       kind: queue
       queue: { fifo: true, maxReceiveCount: 3 }
+---
+# The model plane. The app names routes, never models: this CR maps `default` and
+# `embeddings` to concrete Bedrock models, and the gateway rewrites each request
+# upstream. Model selection, the `us.` inference-profile prefix the Claude family
+# requires, the guardrail and the rate limits all live here rather than in chart
+# values, so changing a model is a CR edit rather than an app redeploy.
+#
+# The operator reconciles this into an Envoy AI Gateway data plane in
+# `tenants-slack-knowledge-bot`, running under the tenant ServiceAccount — so the
+# gateway reaches Bedrock as this tenant and the app itself holds no AWS model
+# credential.
+apiVersion: agents.nanohype.dev/v1alpha1
+kind: ModelGateway
+metadata:
+  name: slack-knowledge-bot
+  namespace: tenants-workplace
+spec:
+  platformRef:
+    name: slack-knowledge-bot
+  routes:
+    # Answer generation over retrieved context. Served by the AWSAnthropic
+    # schema, which takes the native Anthropic Messages shape the app sends —
+    # so the prompt-cache breakpoint on the stable system prefix survives.
+    - name: default
+      modelSource: foundation
+      modelFamily: anthropic
+      modelId: anthropic.claude-sonnet-5
+      # The current Claude family reports inferenceTypesSupported:
+      # [INFERENCE_PROFILE], so the bare foundation-model id is rejected by
+      # InvokeModel. Outside the US switch this to `eu.` / `global.` and widen
+      # spec.identity.allowedModels on the Platform to match.
+      crossRegionProfile: us.anthropic.claude-sonnet-5
+      # One generation per question asked in Slack. A runaway guard, not a quota.
+      rateLimit: 300
+    # Query embeddings. Titan is not Anthropic-shaped, so this route is served by
+    # the AWSBedrock schema: the app sends the OpenAI embeddings shape on
+    # /v1/embeddings and the gateway translates it to a Titan InvokeModel call.
+    # Titan is single-input and so is the translator — the app already embedded
+    # one query at a time, so nothing about retrieval changes.
+    - name: embeddings
+      modelSource: foundation
+      modelFamily: amazon-titan
+      modelId: amazon.titan-embed-text-v2:0
+      # One embedding per question, plus a burst whenever the corpus is seeded.
+      rateLimit: 600

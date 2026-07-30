@@ -15,16 +15,11 @@
  * breaker: Bedrock has its own retry/backoff, and an embedding failure
  * on one query doesn't spare the next.
  */
-import { type BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
-import { z } from "zod";
 import type { RetrievalHit } from "../connectors/types.js";
 import { logger } from "../logger.js";
 import { CircuitOpenError, createCircuitBreaker } from "../vendor/runtime/circuit-breaker.js";
 import type { RetrievalBackend } from "./backends/types.js";
-
-const EmbeddingResponseSchema = z.object({
-  embedding: z.array(z.number()).min(1),
-});
+import { embedViaGateway } from "./gateway-embeddings.js";
 
 const TOP_K = 20;
 const FINAL_K = 10;
@@ -36,8 +31,12 @@ const HALF_OPEN_AFTER_MS = 30_000;
 
 export interface RetrieverConfig {
   backend: RetrievalBackend;
-  bedrock: BedrockRuntimeClient;
-  embeddingModelId: string;
+  /** Base URL of the Platform's ModelGateway. */
+  gatewayEndpoint: string;
+  /** The embeddings route on that gateway, not a model id. */
+  embeddingRoute: string;
+  /** Vector width; the pgvector column is declared at this size. */
+  embeddingDimensions: number;
   onTiming?: (metric: string, ms: number) => void;
   onCounter?: (metric: string, value?: number, dims?: Record<string, string>) => void;
   /** Test hook — override the wall clock used by the retrieval breaker. */
@@ -64,26 +63,19 @@ export function createRetriever(deps: RetrieverConfig): Retriever {
   return {
     async embedQuery(queryText) {
       const start = Date.now();
-      const response = await deps.bedrock.send(
-        new InvokeModelCommand({
-          modelId: deps.embeddingModelId,
-          contentType: "application/json",
-          accept: "application/json",
-          body: JSON.stringify({ inputText: queryText }),
-        }),
-        { abortSignal: AbortSignal.timeout(EMBED_TIMEOUT_MS) },
-      );
-      timing("embedding.latency_ms", Date.now() - start);
-      const raw: unknown = JSON.parse(new TextDecoder().decode(response.body));
-      const parsed = EmbeddingResponseSchema.safeParse(raw);
-      if (!parsed.success) {
-        logger.error(
-          { modelId: deps.embeddingModelId, err: parsed.error.issues },
-          "Bedrock embedding response did not match expected shape",
-        );
-        throw new Error("Bedrock embedding response invalid");
+      try {
+        const embedding = await embedViaGateway(queryText, {
+          endpoint: deps.gatewayEndpoint,
+          route: deps.embeddingRoute,
+          timeoutMs: EMBED_TIMEOUT_MS,
+          dimensions: deps.embeddingDimensions,
+        });
+        timing("embedding.latency_ms", Date.now() - start);
+        return embedding;
+      } catch (err) {
+        logger.error({ route: deps.embeddingRoute, err }, "model gateway embedding call failed");
+        throw err;
       }
-      return parsed.data.embedding;
     },
 
     async hybridSearch(queryText, queryEmbedding) {
