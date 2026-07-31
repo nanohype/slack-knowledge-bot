@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { beforeAll, describe, expect, it } from "vitest";
+import { anthropicBaseUrl } from "../src/config/gateway-url.js";
 import { createGenerator } from "../src/rag/generator.js";
 import { type GradeResult, grade, loadSuite, score, toHits } from "./harness.js";
 
@@ -47,7 +48,7 @@ describe.skipIf(configured === "")(`eval: ${suite.name}`, () => {
 
     const generator = createGenerator({
       model: new Anthropic({
-        baseURL: GATEWAY,
+        baseURL: anthropicBaseUrl(GATEWAY),
         // The gateway holds the AWS credential; the eval holds none.
         apiKey: "unused-the-gateway-holds-the-credential",
       }),

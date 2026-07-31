@@ -18,6 +18,7 @@ import { App } from "@slack/bolt";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Pool } from "pg";
 import { createAuditLogger } from "./audit/audit-logger.js";
+import { anthropicBaseUrl } from "./config/gateway-url.js";
 import { config } from "./config/index.js";
 import { createAclGuard } from "./connectors/acl-guard.js";
 import { createWorkOSResolver } from "./identity/workos-resolver.js";
@@ -50,7 +51,7 @@ const ddb = new DynamoDBClient({
 // identity, applies each route's guardrail, and records the request — this app
 // holds no model credential.
 const model = new Anthropic({
-  baseURL: config.MODEL_GATEWAY_ENDPOINT,
+  baseURL: anthropicBaseUrl(config.MODEL_GATEWAY_ENDPOINT),
   // The gateway authenticates to Bedrock with its own Pod Identity credentials.
   // The SDK requires the field; the gateway ignores it.
   apiKey: "unused-the-gateway-holds-the-credential",
