@@ -16,7 +16,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
-    "docs": "echo 'Docs: README.md, AGENTS.md, ARCHITECTURE.md, docs/'",
+    "docs": "typedoc",
     "install:all": "npm ci && npm --prefix packages/oauth ci",
     "build:oauth": "npm --prefix packages/oauth run build",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run platform:validate",
@@ -57,6 +57,7 @@
     "aws-sdk-client-mock": "^4.1.0",
     "js-yaml": "^5.2.1",
     "tsx": "^4.21.0",
+    "typedoc": "^0.28.20",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
   },
