@@ -225,8 +225,21 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
-      - run: npm ci
+      # `npm install`, matching the verify job: the lockfile is generated on
+      # macOS and omits Linux platform-specific optional deps.
+      - run: npm install --prefer-offline --no-audit --no-fund
+
+      # slack-knowledge-bot-oauth is a `file:` dependency on packages/oauth, so
+      # it resolves to types only once that package has been built. typedoc
+      # type-checks the whole program, so without this it fails on every import
+      # of the module rather than on anything it was asked to document.
+      - name: Install and build slack-knowledge-bot-oauth
+        run: |
+          npm install --prefer-offline --no-audit --no-fund
+          npm run build
+        working-directory: packages/oauth
 
       - name: Generate the API reference
         run: npm run docs
