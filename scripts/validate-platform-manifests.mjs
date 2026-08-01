@@ -352,6 +352,39 @@ function modelGrantCovers(allowed, invoked) {
   return invoked === `us.${allowed}`;
 }
 
+/**
+ * Every chart env var that names a gateway route, and the wire format this app
+ * consumes that route in.
+ *
+ * `MODEL_ROUTE` is read by the Anthropic Messages client in `src/index.ts`,
+ * which is handed `anthropicBaseUrl(...)` — the `/anthropic` prefix.
+ * `EMBEDDING_ROUTE` is requested as `/v1/embeddings` off the gateway root,
+ * which is the OpenAI prefix.
+ *
+ * The formats are declared rather than inferred because a route's format is a
+ * property of the CR and the client is a property of the code: only something
+ * outside both can tell you they still agree.
+ */
+const ROUTE_ENV_WIRE_FORMATS = {
+  MODEL_ROUTE: "Anthropic",
+  EMBEDDING_ROUTE: "OpenAI",
+};
+
+/**
+ * The wire format a route resolves to, mirroring the operator's
+ * `effectiveRouteAPI`.
+ *
+ * An explicit `api` wins. Unset, only an anthropic-family foundation model is
+ * reachable in its native shape; everything else — the other families, and any
+ * imported open-weight model whatever its family says — is served as OpenAI.
+ */
+function effectiveRouteApi(route) {
+  if (route.api) return route.api;
+  return route.modelSource !== "imported" && route.modelFamily === "anthropic"
+    ? "Anthropic"
+    : "OpenAI";
+}
+
 /** Parse an `OTEL_RESOURCE_ATTRIBUTES` string into a plain object. */
 const parseResourceAttributes = (value) =>
   Object.fromEntries(
@@ -457,8 +490,8 @@ function checkConsistency(docs, chartValues, errors) {
   // chart; the chart names routes the CR must declare. A rename on either side
   // yields pods that start cleanly and fail every model call — connection
   // refused, or a gateway 404 for an unmatched route.
-  const declaredRoutes = new Set(
-    gateways.flatMap((g) => (g.spec?.routes ?? []).map((r) => r.name)),
+  const declaredRoutes = new Map(
+    gateways.flatMap((g) => (g.spec?.routes ?? []).map((r) => [r.name, r])),
   );
   const expectedEndpoint = `http://${platformName}-gateway.tenants-${platformName}.svc.cluster.local:8080`;
   for (const { file, values } of chartValues) {
@@ -470,15 +503,45 @@ function checkConsistency(docs, chartValues, errors) {
           "cleanly and fails every model call with a connection error",
       );
     }
-    for (const key of ["MODEL_ROUTE", "EMBEDDING_ROUTE"]) {
-      const route = values?.env?.[key];
-      if (typeof route !== "string" || route === "" || declaredRoutes.size === 0) continue;
-      if (declaredRoutes.has(route)) continue;
+    // Any env var naming a route has to be declared above. Checking a fixed
+    // pair instead is how a route variable added later goes unchecked while
+    // the gate still reports green.
+    for (const key of Object.keys(values?.env ?? {})) {
+      if (!key.endsWith("_ROUTE") || key in ROUTE_ENV_WIRE_FORMATS) continue;
       errors.push(
-        `${file}: env.${key}="${route}" names no route on the ModelGateway (declared: ` +
-          `${[...declaredRoutes].join(", ")}) — the gateway has no rule matching it, so every ` +
-          "request is refused at the gateway rather than reaching a model",
+        `${file}: env.${key} names a gateway route but is missing from ` +
+          "ROUTE_ENV_WIRE_FORMATS in this script — add it with the wire format the app " +
+          "consumes it in, or the route it names is validated by nothing",
       );
+    }
+    for (const [key, wireFormat] of Object.entries(ROUTE_ENV_WIRE_FORMATS)) {
+      const name = values?.env?.[key];
+      if (typeof name !== "string" || name === "" || declaredRoutes.size === 0) continue;
+      const route = declaredRoutes.get(name);
+      if (!route) {
+        errors.push(
+          `${file}: env.${key}="${name}" names no route on the ModelGateway (declared: ` +
+            `${[...declaredRoutes.keys()].join(", ")}) — the gateway has no rule matching it, so ` +
+            "every request is refused at the gateway rather than reaching a model",
+        );
+        continue;
+      }
+      // The route exists; does it speak what the client speaks? The gateway
+      // serves each format under its own prefix, so a mismatch is a request to
+      // a path with no body processor — no x-ai-eg-model header, no rule match,
+      // every call failing while the Gateway reports healthy.
+      const served = effectiveRouteApi(route);
+      if (served !== wireFormat) {
+        const why = route.api
+          ? `routes[${name}].api="${route.api}"`
+          : `routes[${name}] resolves to ${served} from modelFamily="${route.modelFamily}"` +
+            `/modelSource="${route.modelSource}"`;
+        errors.push(
+          `${file}: env.${key}="${name}" is consumed as ${wireFormat}, but ${why} — the client ` +
+            `is built against the ${wireFormat} prefix and the gateway serves that route at the ` +
+            `${served} one, so every call to it 404s at the gateway`,
+        );
+      }
     }
   }
 
@@ -621,6 +684,42 @@ function selfTest(documents, registry, chartValues, sample) {
       expect: /is not the endpoint the operator publishes/,
     },
     {
+      // A route can exist, be named correctly, and still be served in a shape
+      // the client cannot speak. `api` is a CR field and the client is code;
+      // setting one without changing the other applies cleanly and 404s every
+      // call at the gateway.
+      name: "the generation route pinned to a wire format the client does not speak",
+      mutate: (docs) => {
+        const routes = docs.find((d) => d.kind === "ModelGateway").spec.routes;
+        routes.find((r) => r.name === "default").api = "OpenAI";
+      },
+      expect: /is consumed as Anthropic, but routes\[default\]\.api="OpenAI"/,
+    },
+    {
+      // The same mismatch arrived at without touching `api`: the format is
+      // derived from the model when unset, so repointing a route to another
+      // family silently changes the prefix it is served under.
+      name: "the generation route repointed to a family served in another shape",
+      mutate: (docs) => {
+        const routes = docs.find((d) => d.kind === "ModelGateway").spec.routes;
+        routes.find((r) => r.name === "default").modelFamily = "amazon-titan";
+      },
+      expect: /is consumed as Anthropic, but routes\[default\] resolves to OpenAI/,
+    },
+    {
+      // The list of route env vars is what keeps the check honest, so a route
+      // variable the list does not know about has to fail rather than pass
+      // unexamined.
+      name: "a route env var the wire-format list does not cover",
+      mutate: (_docs) => {
+        chartValues[0].values.env.SUMMARY_ROUTE = "default";
+      },
+      restore: () => {
+        delete chartValues[0].values.env.SUMMARY_ROUTE;
+      },
+      expect: /names a gateway route but is missing from ROUTE_ENV_WIRE_FORMATS/,
+    },
+    {
       name: "unknown field on Tenant.spec",
       mutate: (docs) => {
         docs.find((d) => d.kind === "Tenant").spec.aggregateMonthlyBudget = "5000";
@@ -651,10 +750,15 @@ function selfTest(documents, registry, chartValues, sample) {
   ];
 
   const failures = [];
-  for (const { name, mutate, expect } of cases) {
+  for (const { name, mutate, restore, expect } of cases) {
     const docs = clone();
     mutate(docs);
     const errors = validate(docs, registry, chartValues);
+    // Cases that break the chart rather than the manifest mutate shared state,
+    // so they put it back before the next case — and before the clean run
+    // below, which would otherwise inherit the damage and fail for the wrong
+    // reason.
+    restore?.();
     const matched = errors.some((e) => expect.test(e));
     out(`  ${matched ? "PASS" : "FAIL"}  rejects: ${name}`);
     if (matched) {
