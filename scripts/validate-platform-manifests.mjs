@@ -652,7 +652,7 @@ function schemaIntegritySelfTest(sample) {
  * hand.
  */
 function selfTest(documents, registry, chartValues, sample) {
-  const clone = () => JSON.parse(JSON.stringify(documents));
+  const clone = (value = documents) => JSON.parse(JSON.stringify(value));
   const cases = [
     {
       // The drift that costs: a route's model moves and allowedModels does not,
@@ -711,11 +711,8 @@ function selfTest(documents, registry, chartValues, sample) {
       // variable the list does not know about has to fail rather than pass
       // unexamined.
       name: "a route env var the wire-format list does not cover",
-      mutate: (_docs) => {
-        chartValues[0].values.env.SUMMARY_ROUTE = "default";
-      },
-      restore: () => {
-        delete chartValues[0].values.env.SUMMARY_ROUTE;
+      mutate: (_docs, values) => {
+        values[0].values.env.SUMMARY_ROUTE = "default";
       },
       expect: /names a gateway route but is missing from ROUTE_ENV_WIRE_FORMATS/,
     },
@@ -750,15 +747,15 @@ function selfTest(documents, registry, chartValues, sample) {
   ];
 
   const failures = [];
-  for (const { name, mutate, restore, expect } of cases) {
+  for (const { name, mutate, expect } of cases) {
+    // Both inputs are cloned per case. A case that breaks the chart rather
+    // than the manifest would otherwise leave the damage behind for the next
+    // case and for the clean run at the end, which would then fail for a
+    // reason it does not name.
     const docs = clone();
-    mutate(docs);
-    const errors = validate(docs, registry, chartValues);
-    // Cases that break the chart rather than the manifest mutate shared state,
-    // so they put it back before the next case — and before the clean run
-    // below, which would otherwise inherit the damage and fail for the wrong
-    // reason.
-    restore?.();
+    const values = clone(chartValues);
+    mutate(docs, values);
+    const errors = validate(docs, registry, values);
     const matched = errors.some((e) => expect.test(e));
     out(`  ${matched ? "PASS" : "FAIL"}  rejects: ${name}`);
     if (matched) {
@@ -770,7 +767,7 @@ function selfTest(documents, registry, chartValues, sample) {
 
   failures.push(...schemaIntegritySelfTest(sample));
 
-  const clean = validate(clone(), registry, chartValues);
+  const clean = validate(clone(), registry, clone(chartValues));
   out(`  ${clean.length === 0 ? "PASS" : "FAIL"}  accepts: the committed platform.yaml`);
   if (clean.length > 0) failures.push(`committed platform.yaml rejected: ${clean.join("; ")}`);
 
