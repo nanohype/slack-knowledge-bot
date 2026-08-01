@@ -36,6 +36,21 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  *                refusal that works four times in five is not a control,
  *                it is a coin flip with good manners.
  */
+/**
+ * Backends an eval may name.
+ *
+ * One, and that is the design rather than an omission: every model this org
+ * runs is reached through a ModelGateway, so a backend that went around one
+ * would measure a system nobody deploys. To evaluate a different model, point
+ * the gateway's route at it.
+ *
+ * Exported as a value rather than compared inline against a literal, because
+ * `evals/wiring.test.ts` holds the workflow to it. A contract spelled out only
+ * inside an error message is one nothing can check.
+ */
+export const EVAL_BACKENDS = ["gateway"] as const;
+export type EvalBackend = (typeof EVAL_BACKENDS)[number];
+
 export const hitSchema = z
   .object({
     docId: z.string().min(1),

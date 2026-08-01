@@ -14,8 +14,19 @@ for the other:
 ## Running the model tier
 
 ```sh
-EVAL_LLM=bedrock npm run eval            # AWS credential chain
-EVAL_MODEL=<profile-id> EVAL_LLM=bedrock npm run eval
+# Needs a reachable ModelGateway. In cluster that is the operator-published
+# endpoint; outside it, run upstream's standalone `aigw`, which serves 1975:
+#
+#   node scripts/render-eval-gateway.mjs > /tmp/aigw.yaml
+#   aigw run /tmp/aigw.yaml
+#
+# The config is generated from platform.yaml, so the routes and model ids are
+# the ones this app deploys. CI does exactly this — see evals.yml.
+MODEL_GATEWAY_ENDPOINT=http://localhost:1975 EVAL_LLM=gateway npm run eval
+
+# Grade a different route on the same gateway. It must be one platform.yaml
+# declares, because the generated config only carries those.
+EVAL_MODEL_ROUTE=default MODEL_GATEWAY_ENDPOINT=... EVAL_LLM=gateway npm run eval
 ```
 
 `EVAL_LLM` decides whether the tier runs at all, and the two states are

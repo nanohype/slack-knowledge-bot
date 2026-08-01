@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { beforeAll, describe, expect, it } from "vitest";
 import { anthropicBaseUrl } from "../src/config/gateway-url.js";
 import { createGenerator } from "../src/rag/generator.js";
-import { type GradeResult, grade, loadSuite, score, toHits } from "./harness.js";
+import { EVAL_BACKENDS, type GradeResult, grade, loadSuite, score, toHits } from "./harness.js";
 
 // The model tier. Real Bedrock, real prompts, real money.
 //
@@ -29,20 +29,22 @@ describe.skipIf(configured === "")(`eval: ${suite.name}`, () => {
   const results = new Map<string, GradeResult>();
 
   beforeAll(async () => {
+    // Backend before endpoint. The endpoint error names the backend it is
+    // talking about, so running it first told anyone who set EVAL_LLM=bedrock
+    // that `EVAL_LLM="gateway"` needs an endpoint — a value they had not set.
+    if (!(EVAL_BACKENDS as readonly string[]).includes(configured)) {
+      throw new Error(
+        `EVAL_LLM="${configured}" is not a known eval backend (${EVAL_BACKENDS.join(" | ")}). ` +
+          `Unset EVAL_LLM to skip the model tier; setting it means it must run.`,
+      );
+    }
     if (GATEWAY === "") {
       // Checked once here: without it every case fails with the same connection
       // error, which reads as the model failing rather than as missing config.
       throw new Error(
-        'EVAL_LLM="gateway" requires MODEL_GATEWAY_ENDPOINT — the base URL of a reachable ' +
+        `EVAL_LLM="${configured}" requires MODEL_GATEWAY_ENDPOINT — the base URL of a reachable ` +
           "ModelGateway. In cluster that is the operator-published endpoint; outside it, run " +
           "upstream's standalone `aigw` and point at that.",
-      );
-    }
-    if (configured !== "gateway") {
-      throw new Error(
-        `EVAL_LLM="${configured}" is not supported here — this generator speaks the ` +
-          `Anthropic Messages API to a ModelGateway. Use EVAL_LLM=gateway, or unset it to skip ` +
-          `the model tier.`,
       );
     }
 
