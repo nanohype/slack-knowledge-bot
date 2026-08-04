@@ -23,6 +23,13 @@ const defaults: Record<string, string> = {
   GOOGLE_OAUTH_CLIENT_SECRET: "test",
   APP_BASE_URL: "https://test",
   STATE_SIGNING_SECRET: "test-state-signing-secret-at-least-32-bytes-long",
+  // A placeholder, and it belongs here rather than in vitest.eval.config.ts
+  // precisely because this list is a fallback: the loop below skips any key
+  // already set. Vitest's `test.env` is not a fallback — it overwrites
+  // process.env unconditionally, so declaring this there would silently
+  // discard the endpoint the eval workflow exports and send every model call
+  // at a cluster-internal DNS name that does not resolve in CI.
+  MODEL_GATEWAY_ENDPOINT: "http://gw.tenants-x.svc.cluster.local:8080",
   NODE_ENV: "test",
 };
 
