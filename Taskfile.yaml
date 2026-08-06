@@ -38,7 +38,7 @@ tasks:
   # === TypeScript ===
 
   check:
-    desc: 'App gate: typecheck + lint + format:check + test + platform:validate'
+    desc: 'App gate: typecheck + lint + format:check + editorconfig + test + platform:validate'
     cmds:
       - npm run check
 
