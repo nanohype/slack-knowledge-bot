@@ -8,11 +8,15 @@ const ConfigSchema = z.object({
 
   // AWS
   AWS_REGION: z.string().default("us-west-2"),
-  DYNAMODB_TABLE_TOKENS: z.string(),
-  DYNAMODB_TABLE_AUDIT: z.string(),
-  DYNAMODB_TABLE_IDENTITY_CACHE: z.string(),
-  SQS_AUDIT_QUEUE_URL: z.string(),
-  SQS_AUDIT_DLQ_URL: z.string(),
+  // Every value below arrives from a tenantInfra slot that ships empty for the
+  // operator to fill from the tenant-substrate outputs. `.min(1)` so an unfilled
+  // slot fails at boot rather than at first use, where an empty table name or
+  // queue URL surfaces as an opaque SDK error on a request path.
+  DYNAMODB_TABLE_TOKENS: z.string().min(1),
+  DYNAMODB_TABLE_AUDIT: z.string().min(1),
+  DYNAMODB_TABLE_IDENTITY_CACHE: z.string().min(1),
+  SQS_AUDIT_QUEUE_URL: z.string().min(1),
+  SQS_AUDIT_DLQ_URL: z.string().min(1),
   // Retrieval backend URL. Empty → bootstrap wires a null backend
   // (retriever returns empty hits). `postgres://…` → pgvector. Any
   // other value fails at startup so typos don't silently fall back to
@@ -44,7 +48,12 @@ const ConfigSchema = z.object({
   // .min(1), not a bare string: an empty value passes a bare z.string() and the
   // pod starts, then fails on the first envelope operation instead of at boot.
   KMS_KEY_ID: z.string().min(1),
-  REDIS_URL: z.string(),
+  // Same reason, and it was missed on the line right below the comment saying
+  // so. redisUrl ships as an empty tenantInfra placeholder, a bare z.string()
+  // accepts it, and `new Redis("")` with lazyConnect:false connects to ioredis's
+  // localhost default instead — so the pod boots, reports healthy, and logs a
+  // connection error forever while every rate-limit check silently misses.
+  REDIS_URL: z.string().min(1),
 
   // The model plane. Every model call goes through the Platform's ModelGateway,
   // which holds the AWS identity, applies each route's guardrail, and records
