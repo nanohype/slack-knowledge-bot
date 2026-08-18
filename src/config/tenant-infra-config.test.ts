@@ -67,10 +67,9 @@ describe("AWS_REGION is required, not defaulted", () => {
   it("declares AWS_REGION with no default", () => {
     const decl = fields.get("AWS_REGION");
     expect(decl, "AWS_REGION missing from the config schema entirely").toBeDefined();
-    expect(
-      decl?.includes(".default("),
-      `AWS_REGION must stay required — found: ${decl}`,
-    ).toBe(false);
+    expect(decl?.includes(".default("), `AWS_REGION must stay required — found: ${decl}`).toBe(
+      false,
+    );
     expect(
       decl?.includes(".min("),
       `AWS_REGION must reject the empty string — found: ${decl}`,
