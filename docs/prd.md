@@ -84,7 +84,7 @@ Users invoke the bot as `@slack-knowledge-bot` in Slack channels and DMs.
 | NFR-02 Availability | 99.5% monthly uptime (internal tool SLA) |
 | NFR-03 Scale | Support up to 10k NanoCorp users, 500 concurrent queries |
 | NFR-04 Security | Zero cross-tenant leaks; per-user ACL enforcement; audit log integrity |
-| NFR-05 Data Residency | All data processed and stored in us-west-2 |
+| NFR-05 Data Residency | All data stored in us-east-1; LLM inference confined to US regions (the `us.` Bedrock profile spans us-east-1 / us-east-2 / us-west-2) |
 | NFR-06 Observability | Structured JSON logs, OpenTelemetry traces, CloudWatch dashboards |
 
 ## 7. OKRs
