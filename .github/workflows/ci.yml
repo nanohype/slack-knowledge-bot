@@ -27,15 +27,16 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install (app)
-        # `npm install` instead of `npm ci`: the lockfile is generated on
-        # macOS and omits Linux platform-specific optional deps that
-        # vitest/rolldown pull in. `npm install` resolves them on the Linux
-        # runner; version pinning still comes from the lockfile. Switch back
-        # to `npm ci` once a cross-platform lockfile is committed.
-        run: npm install --prefer-offline --no-audit --no-fund
+        # `npm ci`, not `npm install`: the install must fail on a lockfile that
+        # disagrees with package.json rather than quietly resolving a new tree,
+        # which is the whole point of gating on it. Both lockfiles carry the
+        # platform-specific optional deps for every target (25 linux entries
+        # each, all with resolved + integrity), so a glibc runner and the musl
+        # image in the Dockerfile both install from the lockfile alone.
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Install (slack-knowledge-bot-oauth package)
-        run: npm install --prefer-offline --no-audit --no-fund
+        run: npm ci --prefer-offline --no-audit --no-fund
         working-directory: packages/oauth
 
       - name: Lint (slack-knowledge-bot-oauth)
@@ -270,9 +271,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      # `npm install`, matching the verify job: the lockfile is generated on
-      # macOS and omits Linux platform-specific optional deps.
-      - run: npm install --prefer-offline --no-audit --no-fund
+      # `npm ci`, matching the verify job.
+      - run: npm ci --prefer-offline --no-audit --no-fund
 
       # slack-knowledge-bot-oauth is a `file:` dependency on packages/oauth, so
       # it resolves to types only once that package has been built. typedoc
@@ -280,7 +280,7 @@ jobs:
       # of the module rather than on anything it was asked to document.
       - name: Install and build slack-knowledge-bot-oauth
         run: |
-          npm install --prefer-offline --no-audit --no-fund
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
         working-directory: packages/oauth
 
