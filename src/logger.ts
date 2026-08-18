@@ -9,11 +9,19 @@
  * No AsyncLocalStorage shim: the active-span lookup is the single source of
  * truth for correlation. When no span is active (e.g. startup logs before
  * the first request) the trace fields are omitted, not stubbed.
+ *
+ * Reads its two env vars directly rather than importing the app config, and
+ * that is load-bearing rather than a shortcut. Every module imports this one,
+ * including `src/bin/audit-consumer.ts` — a second entrypoint whose Deployment
+ * ships ten env vars and no secret. `config/index.ts` calls `process.exit(1)`
+ * at module scope on a failed parse, so importing it here made the audit
+ * consumer exit 1 on ~25 missing app values before reaching any of its own
+ * logic. A logger needs a level; it does not need the Slack tokens.
+ * `src/logger.import-graph.test.ts` holds this line.
  */
 
 import { trace } from "@opentelemetry/api";
 import pino from "pino";
-import { config } from "./config/index.js";
 
 const EMPTY_TRACE_ID = "00000000000000000000000000000000";
 
@@ -66,9 +74,21 @@ function traceFields(): { trace_id?: string; span_id?: string } {
   return { trace_id: ctx.traceId, span_id: ctx.spanId };
 }
 
+// pino throws on an unrecognised level, which would turn a typo in a chart
+// value into a crash-looping pod. Unknown values fall back to the NODE_ENV
+// default instead — the level is an operational dial, not a safety control,
+// and there is no logger yet to warn through.
+const PINO_LEVELS = new Set(["fatal", "error", "warn", "info", "debug", "trace", "silent"]);
+
+function resolveLevel(): string {
+  const fallback = process.env.NODE_ENV === "production" ? "info" : "debug";
+  const requested = process.env.LOG_LEVEL;
+  return requested && PINO_LEVELS.has(requested) ? requested : fallback;
+}
+
 export const logger = pino(
   {
-    level: config.NODE_ENV === "production" ? "info" : "debug",
+    level: resolveLevel(),
     base: { service: "slack-knowledge-bot" },
     timestamp: pino.stdTimeFunctions.isoTime,
     mixin: () => traceFields(),
