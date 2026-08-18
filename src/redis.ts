@@ -16,6 +16,13 @@ let redisClient: Redis | null = null;
 export function getRedis(): Redis {
   if (!redisClient) {
     const isTls = config.REDIS_URL.startsWith("rediss://");
+    // ioredis 6 negotiates RESP3 by default. Left on the default deliberately:
+    // the limiter's whole command set (ZREMRANGEBYSCORE / ZCARD / ZADD /
+    // EXPIRE) replies with integers under both protocols, and pipeline().exec()
+    // keeps its [err, result] tuple shape, so no reply parsing changes. The
+    // commands whose replies RESP3 reshapes into maps — CONFIG GET, HGETALL,
+    // XPENDING — are not ones this service issues. `protocol: 2` would pin the
+    // v5 wire format if a cache ever needs it.
     redisClient = new Redis(config.REDIS_URL, {
       enableReadyCheck: true,
       maxRetriesPerRequest: 3,

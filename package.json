@@ -44,7 +44,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.79.0",
     "@slack/bolt": "^4.7.0",
     "@smithy/node-http-handler": "^4.11.2",
-    "ioredis": "^5.10.1",
+    "ioredis": "^6.0.0",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
     "slack-knowledge-bot-oauth": "file:./packages/oauth",
