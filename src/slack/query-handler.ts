@@ -106,25 +106,42 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     }
   }
 
-  async function runQuery(args: ProcessQueryArgs & { traceId: string }): Promise<void> {
-    const { userId, text, channelId, say, client, ts, traceId } = args;
-    const startTime = now();
-
+  /**
+   * Rate limit. Replies with the limit message and returns false when the
+   * caller is over; the caller returns without touching retrieval.
+   */
+  async function passesRateLimit(userId: string, say: SayFn, ts?: string): Promise<boolean> {
     const rateResult = await deps.rateLimiter.check(userId, deps.workspaceId);
-    if (!rateResult.allowed) {
-      const limitType = rateResult.limitType ?? "user";
-      counter("ratelimit.hit", 1, { limit_type: limitType });
-      await say({
-        ...formatRateLimitMessage(limitType, rateResult.resetAt, {
-          userPerHour: deps.userPerHour,
-          workspacePerHour: deps.workspacePerHour,
-          now,
-        }),
-        thread_ts: ts,
-      });
-      return;
-    }
+    if (rateResult.allowed) return true;
 
+    const limitType = rateResult.limitType ?? "user";
+    counter("ratelimit.hit", 1, { limit_type: limitType });
+    await say({
+      ...formatRateLimitMessage(limitType, rateResult.resetAt, {
+        userPerHour: deps.userPerHour,
+        workspacePerHour: deps.workspacePerHour,
+        now,
+      }),
+      thread_ts: ts,
+    });
+    return false;
+  }
+
+  /**
+   * Slack user -> workforce-directory identity, via the profile email.
+   *
+   * Two distinct failures with two distinct messages: no verified Slack email,
+   * and an email the directory does not know. Both reply and return null —
+   * every downstream ACL probe is scoped to this identity, so there is no
+   * meaningful "continue without it".
+   */
+  async function resolveIdentity(
+    client: BoltClient,
+    userId: string,
+    say: SayFn,
+    traceId: string,
+    ts?: string,
+  ) {
     const slackEmail = await getSlackEmail(client, userId);
     if (!slackEmail) {
       await say({
@@ -134,8 +151,9 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
         ),
         thread_ts: ts,
       });
-      return;
+      return null;
     }
+
     const identity = await deps.identityResolver.resolveSlackToExternal(userId, slackEmail);
     if (!identity) {
       await say({
@@ -145,54 +163,108 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
         ),
         thread_ts: ts,
       });
-      return;
+      return null;
     }
+    return identity;
+  }
 
+  /**
+   * OAuth token presence, checked before any retrieval work.
+   *
+   * Only a caller missing *every* source gets the connect prompt — a partial
+   * grant still answers over what they have connected, which is the whole
+   * point of per-user ACL. Presence only; validity is the ACL guard's job.
+   */
+  async function passesTokenPresence(
+    externalUserId: string,
+    say: SayFn,
+    ts?: string,
+  ): Promise<boolean> {
     const presence = await Promise.all(
       SUPPORTED_SOURCES.map(async (source) => {
-        const grant = await deps.oauthStorage.get(
-          identity.externalUserId,
-          deps.sourceToProvider[source],
-        );
+        const grant = await deps.oauthStorage.get(externalUserId, deps.sourceToProvider[source]);
         return { source, present: grant !== null };
       }),
     );
     const missingTokenSources = presence.filter((p) => !p.present).map((p) => p.source);
+    if (missingTokenSources.length < SUPPORTED_SOURCES.length) return true;
 
-    if (missingTokenSources.length === SUPPORTED_SOURCES.length) {
-      const authLinks = Object.fromEntries(
-        SUPPORTED_SOURCES.map((source) => {
-          const provider = deps.sourceToProvider[source];
-          const signed = deps.signOAuthStartUrl(identity.externalUserId, provider);
-          return [
-            source,
-            `${deps.appBaseUrl}/oauth/${provider}/start?t=${encodeURIComponent(signed)}`,
-          ];
-        }),
-      ) as Record<Source, string>;
-      await say({
-        ...formatOAuthPrompt(missingTokenSources, authLinks),
-        thread_ts: ts,
-      });
-      return;
-    }
+    const authLinks = Object.fromEntries(
+      SUPPORTED_SOURCES.map((source) => {
+        const provider = deps.sourceToProvider[source];
+        const signed = deps.signOAuthStartUrl(externalUserId, provider);
+        return [
+          source,
+          `${deps.appBaseUrl}/oauth/${provider}/start?t=${encodeURIComponent(signed)}`,
+        ];
+      }),
+    ) as Record<Source, string>;
+    await say({ ...formatOAuthPrompt(missingTokenSources, authLinks), thread_ts: ts });
+    return false;
+  }
 
+  /**
+   * Retrieve, then verify each hit against the asking user's own tokens.
+   *
+   * The ACL check runs *after* retrieval and is the anti-leak boundary: a
+   * document that scored well is dropped unless this user can read it in the
+   * source system. `getValidToken` failing is not fatal here — the guard
+   * fail-secures on a null token, so a token error redacts the document
+   * rather than answering from it.
+   */
+  async function retrieveVerified(text: string, externalUserId: string) {
     const queryEmbedding = await deps.retriever.embedQuery(text);
     const rawHits = await deps.retriever.hybridSearch(text, queryEmbedding);
 
     const verifiedHits = await deps.aclGuard.verify(rawHits, async (source) => {
       try {
-        return await deps.oauth.getValidToken(
-          identity.externalUserId,
-          deps.sourceToProvider[source],
-        );
+        return await deps.oauth.getValidToken(externalUserId, deps.sourceToProvider[source]);
       } catch (err) {
-        logger.warn({ err, source, userId: identity.externalUserId }, "getValidToken failed");
+        logger.warn({ err, source, userId: externalUserId }, "getValidToken failed");
         return null;
       }
     });
-    const accessibleHits = verifiedHits.filter((h) => h.accessVerified);
-    const redactedHits = verifiedHits.filter((h) => h.wasRedacted);
+
+    return {
+      rawHits,
+      verifiedHits,
+      accessibleHits: verifiedHits.filter((h) => h.accessVerified),
+      redactedHits: verifiedHits.filter((h) => h.wasRedacted),
+    };
+  }
+
+  /**
+   * Blocking compliance audit.
+   *
+   * Awaited, not fire-and-forget: the query is not done until the event (or
+   * its DLQ fallback inside emitQuery) has landed. The user already has their
+   * answer, so the latency is paid here rather than in the visible path. A
+   * failure past the fallback is counted and logged, never swallowed.
+   */
+  async function emitAudit(event: ReturnType<typeof buildQueryAuditEvent>): Promise<void> {
+    try {
+      await deps.auditLogger.emitQuery(event);
+    } catch (err) {
+      counter("audit.emission_fail");
+      logger.error({ err }, "audit emission failed after blocking await");
+    }
+  }
+
+  async function runQuery(args: ProcessQueryArgs & { traceId: string }): Promise<void> {
+    const { userId, text, channelId, say, client, ts, traceId } = args;
+    const startTime = now();
+
+    if (!(await passesRateLimit(userId, say, ts))) return;
+
+    const identity = await resolveIdentity(client, userId, say, traceId, ts);
+    if (!identity) return;
+
+    if (!(await passesTokenPresence(identity.externalUserId, say, ts))) return;
+
+    const { rawHits, verifiedHits, accessibleHits, redactedHits } = await retrieveVerified(
+      text,
+      identity.externalUserId,
+    );
 
     const { answerText, citations, hasRedactedHits } = await deps.generator.generate(
       text,
@@ -207,38 +279,30 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
 
     const latencyMs = now() - startTime;
 
-    const auditEvent = buildQueryAuditEvent(
-      {
-        traceId,
-        userId: identity.externalUserId,
-        slackUserId: userId,
-        channelId,
-        rawQuery: text,
-        retrievedDocIds: rawHits.map((h) => h.docId),
-        accessibleDocIds: accessibleHits.map((h) => h.docId),
-        redactedDocCount: redactedHits.length,
-        answerText,
-        latencyMs,
-        sources: citations.map((c) => ({
-          source: c.source,
-          docId: c.docId,
-          url: c.url,
-          lastModified: c.lastModified,
-          wasStale: c.isStale,
-        })),
-      },
-      now,
+    await emitAudit(
+      buildQueryAuditEvent(
+        {
+          traceId,
+          userId: identity.externalUserId,
+          slackUserId: userId,
+          channelId,
+          rawQuery: text,
+          retrievedDocIds: rawHits.map((h) => h.docId),
+          accessibleDocIds: accessibleHits.map((h) => h.docId),
+          redactedDocCount: redactedHits.length,
+          answerText,
+          latencyMs,
+          sources: citations.map((c) => ({
+            source: c.source,
+            docId: c.docId,
+            url: c.url,
+            lastModified: c.lastModified,
+            wasStale: c.isStale,
+          })),
+        },
+        now,
+      ),
     );
-    // Blocking await: compliance audit must complete (or its DLQ fallback
-    // inside emitQuery must complete) before the query is considered done.
-    // The user already saw their answer; the small additional latency is
-    // paid here, not in the user-perceptible path.
-    try {
-      await deps.auditLogger.emitQuery(auditEvent);
-    } catch (err) {
-      counter("audit.emission_fail");
-      logger.error({ err }, "audit emission failed after blocking await");
-    }
 
     timing("query.latency_ms", latencyMs);
     counter("query.outcome", 1, { outcome: "success" });
@@ -255,7 +319,6 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
       "query processed",
     );
   }
-
   async function processQuery(args: ProcessQueryArgs): Promise<void> {
     const traceId = randomUUID();
     try {
