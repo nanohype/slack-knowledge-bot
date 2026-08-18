@@ -47,6 +47,59 @@ function schemaFields(): Map<string, string> {
   return out;
 }
 
+describe("AWS_REGION is required, not defaulted", () => {
+  const fields = schemaFields();
+
+  /**
+   * The region is not a tenantInfra slot — it arrives from `.Values.env` — so
+   * the suite above does not cover it. It still belongs in the same tier: it
+   * is what resolves every table name, queue URL and key ARN the schema
+   * requires, so a default does not fill a blank, it guesses which partition
+   * to reach into. A wrong guess surfaces as an opaque AccessDenied on a
+   * request path (or, under a region-lock SCP, on every path) instead of at
+   * boot, which is the failure this repo already hit once.
+   *
+   * Asserted against the declaration text rather than by parsing the schema,
+   * because `loadConfig()` calls `process.exit(1)` at module load — the same
+   * technique the suite above uses, and it fails the day someone re-adds a
+   * default.
+   */
+  it("declares AWS_REGION with no default", () => {
+    const decl = fields.get("AWS_REGION");
+    expect(decl, "AWS_REGION missing from the config schema entirely").toBeDefined();
+    expect(
+      decl?.includes(".default("),
+      `AWS_REGION must stay required — found: ${decl}`,
+    ).toBe(false);
+    expect(
+      decl?.includes(".min("),
+      `AWS_REGION must reject the empty string — found: ${decl}`,
+    ).toBe(true);
+  });
+
+  it("is supplied to both deployments so requiring it cannot brick a rollout", () => {
+    // Requiring a value the chart does not ship would trade a silent wrong
+    // region for a crash-looping pod. The two Deployments get it by different
+    // routes, so each is checked at its own source.
+    //
+    // The app Deployment renders `range $k, $v := .Values.env`, so the key
+    // must exist in values.yaml — the template never names it.
+    const values = readFileSync(join(ROOT, "chart", "values.yaml"), "utf8");
+    expect(values, "values.yaml env block does not set AWS_REGION").toMatch(
+      /^\s{2}AWS_REGION:\s*\S+/m,
+    );
+
+    // The audit-consumer Deployment enumerates its env explicitly.
+    const consumer = readFileSync(
+      join(ROOT, "chart", "templates", "audit-consumer-deployment.yaml"),
+      "utf8",
+    );
+    expect(consumer, "audit-consumer-deployment.yaml does not wire AWS_REGION").toMatch(
+      /- name:\s*AWS_REGION/,
+    );
+  });
+});
+
 describe("tenantInfra-wired config", () => {
   const wired = tenantInfraEnvVars();
   const fields = schemaFields();

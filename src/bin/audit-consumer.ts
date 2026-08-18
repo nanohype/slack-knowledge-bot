@@ -19,15 +19,16 @@ import { logger } from "../logger.js";
 import { counter } from "../metrics.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "3001", 10);
-// Same home region as the app's Zod default (src/config/index.ts): the
-// Ventures OU SCP denies non-global actions outside us-east-1, and this
-// binary reaches SQS, DynamoDB and S3 on every drain.
-const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
+// Required, not defaulted — same tier as the queue URL and table name below.
+// The region is what resolves those names to actual resources, so guessing it
+// picks a partition rather than filling a blank. Joins the check below.
+const AWS_REGION = process.env.AWS_REGION ?? "";
 const queueUrl = process.env.SQS_AUDIT_QUEUE_URL ?? "";
 const auditTable = process.env.DYNAMODB_TABLE_AUDIT ?? "";
 const auditBucket = process.env.AUDIT_BUCKET ?? "";
 
 for (const [name, value] of Object.entries({
+  AWS_REGION,
   SQS_AUDIT_QUEUE_URL: queueUrl,
   DYNAMODB_TABLE_AUDIT: auditTable,
   AUDIT_BUCKET: auditBucket,
