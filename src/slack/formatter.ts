@@ -23,7 +23,13 @@ const SOURCE_NAMES: Record<SourceCitation["source"], string> = {
   drive: "Google Drive",
 };
 
-const FOOTER_TEXT = `Powered by *SlackKnowledgeBot* ${EMOJI.EM_DASH} answers are grounded in NanoCorp's knowledge base.`;
+// The deploying org's name is injected rather than baked in. Every other
+// tenant-specific value in this service arrives through config; a hardcoded
+// brand here was the one string an adopter would have to edit to reuse the
+// subsystem. Sourced from ORG_DISPLAY_NAME (src/config/index.ts).
+function footerText(orgDisplayName: string): string {
+  return `Powered by *SlackKnowledgeBot* ${EMOJI.EM_DASH} answers are grounded in ${orgDisplayName}'s knowledge base.`;
+}
 const REDACTED_TEXT = `${EMOJI.LOCK} _Note: Some relevant documents were not accessible under your account. You may need to request access._`;
 
 function section(text: string): SlackBlock {
@@ -38,8 +44,8 @@ function divider(): SlackBlock {
   return { type: "divider" };
 }
 
-function footer(): SlackBlock {
-  return context(FOOTER_TEXT);
+function footer(orgDisplayName: string): SlackBlock {
+  return context(footerText(orgDisplayName));
 }
 
 function citation(c: SourceCitation): SlackBlock {
@@ -54,6 +60,7 @@ export function formatAnswer(
   citations: SourceCitation[],
   hasRedactedHits: boolean,
   hasNoHits: boolean,
+  orgDisplayName: string,
 ): FormattedResponse {
   const blocks: SlackBlock[] = [section(answerText)];
 
@@ -68,7 +75,7 @@ export function formatAnswer(
     blocks.push(context(REDACTED_TEXT));
   }
 
-  blocks.push(footer());
+  blocks.push(footer(orgDisplayName));
 
   return {
     blocks,

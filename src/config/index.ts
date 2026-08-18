@@ -97,6 +97,13 @@ const ConfigSchema = z.object({
   RATE_LIMIT_WORKSPACE_PER_HOUR: z.coerce.number().default(500),
   STALE_DOC_THRESHOLD_DAYS: z.coerce.number().default(90),
 
+  // Whose knowledge base the Block Kit footer says answers are grounded in.
+  // Defaulted, not required: it is a display string, not a resource name — a
+  // wrong value misreads, it does not misdirect a write. The generic default
+  // keeps the subsystem runnable unconfigured, which is the point of shipping
+  // it as reusable.
+  ORG_DISPLAY_NAME: z.string().min(1).default("your organization"),
+
   TOKEN_STORE_ENCRYPTION_CONTEXT: z.string().default("slack-knowledge-bot-token-store"),
 
   // OAuth delegation (slack-knowledge-bot-oauth / module-oauth-delegation).

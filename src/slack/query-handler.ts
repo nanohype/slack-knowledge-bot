@@ -39,6 +39,8 @@ export interface QueryHandlerConfig {
   sourceToProvider: Record<Source, string>;
   workspaceId: string;
   appBaseUrl: string;
+  /** Display name for the Block Kit footer — config.ORG_DISPLAY_NAME. */
+  orgDisplayName: string;
   userPerHour: number;
   workspacePerHour: number;
   onCounter?: (metric: string, value?: number, dims?: Record<string, string>) => void;
@@ -273,7 +275,13 @@ export function createQueryHandler(deps: QueryHandlerConfig): QueryHandler {
     );
 
     await say({
-      ...formatAnswer(answerText, citations, hasRedactedHits, accessibleHits.length === 0),
+      ...formatAnswer(
+        answerText,
+        citations,
+        hasRedactedHits,
+        accessibleHits.length === 0,
+        deps.orgDisplayName,
+      ),
       thread_ts: ts,
     });
 
