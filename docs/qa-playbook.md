@@ -25,7 +25,7 @@ Set the AWS profile + region for everything that follows, and point `kubectl` at
 
 ```bash
 export AWS_PROFILE=<your-sso-profile>
-export AWS_REGION=us-west-2
+export AWS_REGION=us-east-1
 aws sts get-caller-identity   # sanity
 kubectl config current-context   # confirm you're on the right cluster
 ```
@@ -92,7 +92,22 @@ curl -s "https://slack-knowledge-bot-staging.example.com/health"
 
 The `us.anthropic.claude-sonnet-5` inference profile routes across **us-east-1, us-east-2, us-west-2** based on load. Each region enables on first-invoke, and the subscribe action needs Marketplace permissions — which the pod's IAM role deliberately doesn't have. **Your admin session does.**
 
-For each of us-east-1, us-east-2, us-west-2:
+> **Open item — the SCP and the profile disagree.** The estate home region is
+> us-east-1, and the Ventures OU SCP `guardrail-region-lock` denies every
+> non-global action outside it. But this profile genuinely fans out to
+> us-east-2 and us-west-2 (`aws bedrock get-inference-profile
+> --inference-profile-identifier us.anthropic.claude-sonnet-5` lists all
+> three), so the enablement below cannot be performed in two of the three
+> regions from the tenant account. Invocation itself is unaffected — the pod
+> calls `bedrock-runtime.us-east-1`, and AWS's internal fan-out is not a
+> principal action the SCP sees. What is blocked is the first-invoke
+> *enablement* in us-east-2 / us-west-2. Switching to
+> `global.anthropic.claude-sonnet-5` is not the fix: it routes worldwide and
+> would break NFR-05 data residency. Resolution is an estate-level call —
+> either an SCP carve-out scoped to `bedrock:*` for the profile's member
+> regions, or accepting reduced capacity if the unenabled regions reject.
+
+For each of us-east-1, us-east-2, us-west-2 (see the open item above):
 
 1. AWS Console → switch region
 2. Bedrock → **Chat / Test** (or Playgrounds → Chat)
@@ -100,9 +115,10 @@ For each of us-east-1, us-east-2, us-west-2:
 4. Type anything, hit Send
 5. If prompted for "use case details" (first-time Anthropic access), fill it in — approved in <2 min
 
-Same for Titan embeddings (us-west-2 only):
+Same for Titan embeddings (us-east-1 — `amazon.titan-embed-text-v2:0` is
+ON_DEMAND there, so no inference profile and no fan-out):
 
-1. Bedrock us-west-2 → Playgrounds → Chat or Text
+1. Bedrock us-east-1 → Playgrounds → Chat or Text
 2. Model: **Titan Embeddings v2**
 3. Send anything
 
@@ -474,7 +490,7 @@ AccessDeniedException: … aws-marketplace:ViewSubscriptions, aws-marketplace:Su
 
 **Root cause:** The foundation model is served via AWS Marketplace, which requires a first-time subscribe action. The pod's IAM role intentionally lacks `aws-marketplace:Subscribe` (that would let it subscribe to arbitrary paid models), and the per-region subscribe hasn't been triggered by an admin yet. The cross-region inference profile (`us.anthropic.…`) fans out to **us-east-1, us-east-2, us-west-2** — every region needs the subscribe.
 
-**Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 5 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted.
+**Fix:** From §3 — AWS Console as admin, switch to each of those regions, Bedrock → Chat → Claude Sonnet 5 → send any prompt. For first-time Anthropic use, fill in the use-case form when prompted. Note the open item in §3: under the Ventures OU SCP the us-east-2 / us-west-2 enablement is denied from the tenant account, so if this is the symptom you are chasing, it is an estate-level block and not something to retry locally.
 
 ---
 

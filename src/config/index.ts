@@ -7,7 +7,11 @@ const ConfigSchema = z.object({
   SLACK_APP_TOKEN: z.string(),
 
   // AWS
-  AWS_REGION: z.string().default("us-west-2"),
+  // us-east-1 is the estate home region, not a preference: the Ventures OU
+  // carries an SCP (`guardrail-region-lock`) that denies every non-global
+  // action outside it, so a pod booting with any other value gets an explicit
+  // deny on the first DynamoDB, KMS, SQS or S3 call.
+  AWS_REGION: z.string().default("us-east-1"),
   // Every value below arrives from a tenantInfra slot that ships empty for the
   // operator to fill from the tenant-substrate outputs. `.min(1)` so an unfilled
   // slot fails at boot rather than at first use, where an empty table name or
