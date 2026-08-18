@@ -1,9 +1,10 @@
 /**
  * Application metrics via the OTel Metrics API.
  *
- * Exports via OTLP to the Grafana Alloy receiver
- * (alloy.monitoring.svc.cluster.local:4318), which forwards metrics to
- * Amazon Managed Prometheus. The meter provider is bootstrapped by
+ * Exports via OTLP to the cluster's OpenTelemetry Collector gateway
+ * (telemetry.monitoring.svc.cluster.local:4318 — see
+ * OTEL_EXPORTER_OTLP_ENDPOINT in chart/values.yaml), which forwards metrics
+ * to Amazon Managed Prometheus. The meter provider is bootstrapped by
  * `@opentelemetry/auto-instrumentations-node/register` (NODE_OPTIONS in the
  * Dockerfile) plus OTEL_METRICS_EXPORTER=otlp wired into the pod env by the chart.
  *
