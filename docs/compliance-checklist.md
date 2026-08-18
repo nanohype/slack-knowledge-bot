@@ -102,7 +102,7 @@ no trigger; neither should be represented as automated.
 
 | Policy | Requirement | Status |
 |--------|-------------|--------|
-| Data residency | All data in us-west-2 | ✅ landing-zone substrate provisions us-west-2 only |
+| Data residency | Stored data in us-east-1; inference stays in US regions | ✅ storage — the `tenant-substrate` datastores are provisioned in us-east-1 only, and the Ventures OU SCP `guardrail-region-lock` denies any non-global action outside it. ⚠️ inference — the `us.anthropic.claude-sonnet-5` profile routes prompt + retrieved-context to us-east-1 / us-east-2 / us-west-2 by load, so LLM processing is US-multi-region, not single-region. Claiming one region for inference would be false. |
 | Audit trail | All data access audited | ✅ Audit log for every query |
 | No data exfiltration | Source content not sent to third parties | ✅ Bedrock on-account; no third-party LLM |
 | Token security | No plaintext secrets in code or logs | ✅ KMS encryption; no logging of tokens |

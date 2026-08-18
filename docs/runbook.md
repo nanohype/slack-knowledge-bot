@@ -13,7 +13,7 @@
 | Purpose | Slack bot for NanoCorp knowledge retrieval |
 | Slack handle | @slack-knowledge-bot |
 | AWS account | NanoCorp Production |
-| AWS region | us-west-2 |
+| AWS region | us-east-1 (estate home region; the Ventures OU SCP `guardrail-region-lock` denies non-global actions elsewhere) |
 | Deploy model | Platform tenant on the `eks-agent-platform` operator; ArgoCD reconciles `chart/` from git |
 | EKS namespace | `tenants-slack-knowledge-bot` |
 | Workloads | main `Deployment` (Bolt + HTTP server) + KEDA-scaled audit-consumer `Deployment` |
@@ -153,7 +153,7 @@ plain values and pulls secrets from the ESO-synced k8s Secret (`app-secrets` +
 | `SLACK_BOT_TOKEN` | Bot user OAuth token | `xoxb-...` |
 | `SLACK_SIGNING_SECRET` | Request signature verification | `abc123...` |
 | `SLACK_APP_TOKEN` | Socket Mode token | `xapp-...` |
-| `AWS_REGION` | AWS region | `us-west-2` |
+| `AWS_REGION` | AWS region | `us-east-1` |
 | `DYNAMODB_TABLE_TOKENS` | Token store table | `slack-knowledge-bot-production-tokens` |
 | `DYNAMODB_TABLE_AUDIT` | Audit log table | `slack-knowledge-bot-production-audit` |
 | `DYNAMODB_TABLE_IDENTITY_CACHE` | Identity cache | `slack-knowledge-bot-production-identity-cache` |

@@ -110,13 +110,13 @@ The app ships as a Platform tenant of the `workplace` team on the `eks-agent-pla
 All config via env vars, validated by Zod in `src/config/index.ts`. Copy `.env.example` to `.env` and fill in. Required (no defaults):
 
 - **Slack**: `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`
-- **AWS**: `DYNAMODB_TABLE_TOKENS`, `DYNAMODB_TABLE_AUDIT`, `DYNAMODB_TABLE_IDENTITY_CACHE`, `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL`, `KMS_KEY_ID`, `REDIS_URL`. AMP/Tempo/Loki are reached via the OpenTelemetry Collector receiver in the cluster (eks-gitops), which holds its own Pod Identity association — the app pods carry no observability-backend credentials — see `docs/secrets.md`.
+- **AWS**: `AWS_REGION`, `DYNAMODB_TABLE_TOKENS`, `DYNAMODB_TABLE_AUDIT`, `DYNAMODB_TABLE_IDENTITY_CACHE`, `SQS_AUDIT_QUEUE_URL`, `SQS_AUDIT_DLQ_URL`, `KMS_KEY_ID`, `REDIS_URL`. `AWS_REGION` is required rather than defaulted — it is what resolves every resource name above, so a default would guess a partition rather than fill a blank; the chart supplies it (`us-east-1` on this estate). AMP/Tempo/Loki are reached via the OpenTelemetry Collector receiver in the cluster (eks-gitops), which holds its own Pod Identity association — the app pods carry no observability-backend credentials — see `docs/secrets.md`.
 - **WorkOS**: `WORKOS_API_KEY`, `WORKOS_DIRECTORY_ID`
 - **OAuth apps** (per source): `NOTION_OAUTH_*`, `CONFLUENCE_OAUTH_*`, `GOOGLE_OAUTH_*`
 - **OAuth delegation**: `STATE_SIGNING_SECRET` (≥ 32 bytes — HMACs both the module's state cookie and SlackKnowledgeBot's signed `/start` URL tokens)
 - **App**: `APP_BASE_URL`
 
-Defaults: `AWS_REGION=us-west-2`, `MODEL_ROUTE=default`, `EMBEDDING_ROUTE=embeddings` (route names on the Platform's ModelGateway, not model ids — the CR maps them to `us.anthropic.claude-sonnet-5` and `amazon.titan-embed-text-v2:0`), `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `PG_SSL_REJECT_UNAUTHORIZED=true` (verifies the Aurora cert against the bundled RDS global CA at `certs/rds-global-bundle.pem`; set `false` for a chain-less local Postgres), `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`, `NODE_ENV=development`.
+Defaults: `MODEL_ROUTE=default`, `EMBEDDING_ROUTE=embeddings` (route names on the Platform's ModelGateway, not model ids — the CR maps them to `us.anthropic.claude-sonnet-5` and `amazon.titan-embed-text-v2:0`), `RATE_LIMIT_USER_PER_HOUR=20`, `RATE_LIMIT_WORKSPACE_PER_HOUR=500`, `STALE_DOC_THRESHOLD_DAYS=90`, `TOKEN_STORE_ENCRYPTION_CONTEXT=slack-knowledge-bot-token-store`, `PG_SSL_REJECT_UNAUTHORIZED=true` (verifies the Aurora cert against the bundled RDS global CA at `certs/rds-global-bundle.pem`; set `false` for a chain-less local Postgres), `PG_SSL_CA_PATH=certs/rds-global-bundle.pem`, `NODE_ENV=development`.
 
 App-level secrets in deployment live in AWS Secrets Manager at `slack-knowledge-bot/{env}/app-secrets`. Per-user OAuth tokens live in DynamoDB with KMS envelope encryption — NOT in Secrets Manager (per-user secrets would cost ~$4k/month at 10k users vs ~$10/month for DDB+KMS).
 

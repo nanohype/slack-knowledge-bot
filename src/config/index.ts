@@ -7,7 +7,14 @@ const ConfigSchema = z.object({
   SLACK_APP_TOKEN: z.string(),
 
   // AWS
-  AWS_REGION: z.string().default("us-west-2"),
+  // Required, not defaulted. Every value below names a specific resource, and
+  // the region is what resolves those names — a table name without a region is
+  // not a location. A default here would not be a sensible fallback but a guess
+  // at which partition to reach into, and a wrong guess fails as an opaque
+  // AccessDenied on a request path rather than at boot. The deployment supplies
+  // it (chart/values.yaml); this estate's is us-east-1, which is an estate fact
+  // and not this service's to assume.
+  AWS_REGION: z.string().min(1),
   // Every value below arrives from a tenantInfra slot that ships empty for the
   // operator to fill from the tenant-substrate outputs. `.min(1)` so an unfilled
   // slot fails at boot rather than at first use, where an empty table name or
