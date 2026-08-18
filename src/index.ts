@@ -194,6 +194,7 @@ const queryHandler = createQueryHandler({
   sourceToProvider: SOURCE_TO_PROVIDER,
   workspaceId: "slack-knowledge-bot",
   appBaseUrl: config.APP_BASE_URL,
+  orgDisplayName: config.ORG_DISPLAY_NAME,
   userPerHour: config.RATE_LIMIT_USER_PER_HOUR,
   workspacePerHour: config.RATE_LIMIT_WORKSPACE_PER_HOUR,
   onCounter: counter,
