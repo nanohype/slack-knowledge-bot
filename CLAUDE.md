@@ -181,6 +181,8 @@ When adding tests: accept the SDK client as a typed dep on the source-side facto
 
 The HTTP boundary uses native `fetch` (Node 24's WHATWG implementation) for Notion / Confluence / Drive ACL probes and for WorkOS Directory Sync — no axios.
 
+That last clause holds of the installed tree, not just of first-party code, and it rests on two edges rather than one. `@slack/bolt` 5 declares no axios, *and* it pins `@slack/web-api ^8.0.0`, which dropped axios of its own accord — web-api 7 declared `axios ^1.11.0`, which is how axios was present under bolt 4 despite this rule. The web-api pin is the load-bearing half: a future bolt that relaxed it back to `^7` would put axios back in the tree while this line still claimed otherwise. If axios reappears, check that pin first.
+
 ## Reference docs (`docs/`)
 
 - [`docs/prd.md`](docs/prd.md) — product requirements, OKRs, launch gates
