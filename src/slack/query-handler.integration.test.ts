@@ -200,6 +200,7 @@ function buildDeps(overrides: {
     sourceToProvider: SOURCE_TO_PROVIDER,
     workspaceId: "W",
     appBaseUrl: "https://slack-knowledge-bot.test",
+    orgDisplayName: "Test Org",
     userPerHour: 20,
     workspacePerHour: 500,
     now: () => NOW,

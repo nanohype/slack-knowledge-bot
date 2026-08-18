@@ -24,9 +24,13 @@ const stale: SourceCitation = {
   isStale: true,
 };
 
+// Deliberately not the repo's own name: a footer that still rendered a
+// hardcoded brand would pass a test written against that brand.
+const ORG = "Test Org";
+
 describe("formatAnswer", () => {
   it("renders answer with fresh citation - no stale warning", () => {
-    const result = formatAnswer("Here is the policy.", [fresh], false, false);
+    const result = formatAnswer("Here is the policy.", [fresh], false, false, ORG);
     const citBlock = result.blocks.find(
       (b) => b.type === "context" && JSON.stringify(b).includes("Q3 Sales Playbook"),
     );
@@ -34,23 +38,31 @@ describe("formatAnswer", () => {
     expect(JSON.stringify(citBlock)).not.toContain("\u26a0");
   });
   it("renders stale warning for citations >90 days old", () => {
-    const result = formatAnswer("The policy is...", [stale], false, false);
+    const result = formatAnswer("The policy is...", [stale], false, false, ORG);
     expect(JSON.stringify(result.blocks)).toContain("\u26a0");
     expect(JSON.stringify(result.blocks)).toContain("may be outdated");
   });
   it("shows redacted notice when hasRedactedHits=true", () => {
-    const result = formatAnswer("Partial answer.", [fresh], true, false);
+    const result = formatAnswer("Partial answer.", [fresh], true, false, ORG);
     expect(JSON.stringify(result.blocks)).toContain("not accessible under your account");
   });
   it("does not show redacted notice when no redacted hits", () => {
-    const result = formatAnswer("Full answer.", [fresh], false, false);
+    const result = formatAnswer("Full answer.", [fresh], false, false, ORG);
     expect(JSON.stringify(result.blocks)).not.toContain("not accessible");
   });
   it("includes footer on every response", () => {
-    const result = formatAnswer("Answer", [fresh], false, false);
+    const result = formatAnswer("Answer", [fresh], false, false, ORG);
     expect(
       result.blocks.find((b) => JSON.stringify(b).includes("SlackKnowledgeBot")),
     ).toBeDefined();
+  });
+  it("names the configured org in the footer, not a baked-in brand", () => {
+    const result = formatAnswer("Answer", [fresh], false, false, ORG);
+    const rendered = JSON.stringify(result.blocks);
+    expect(rendered).toContain("Test Org's knowledge base");
+    // The brand this was hardcoded to. Its absence is the actual assertion —
+    // the value now comes from config, so no deployment's name is compiled in.
+    expect(rendered).not.toContain("NanoCorp");
   });
 });
 
