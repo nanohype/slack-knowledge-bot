@@ -60,6 +60,34 @@ export default defineConfig({
           lines: 100,
           statements: 100,
         },
+        // The per-source probes behind that guard. The guard is enforced at 100%
+        // because an untaken branch on the anti-leak boundary is a control that
+        // was never proven — but the guard only decides what to do with what a
+        // probe returns; the probes are where a malformed id or a 403 is turned
+        // into a redaction. confluence sat at 50% branch precisely because
+        // nothing here held it: it is the only probe that validates its docId
+        // shape, so it is the only one with a branch to lose, and notion and
+        // drive read as 100% for the weaker reason that they have no branch at
+        // all. Listing all three keeps that from being luck the day one of them
+        // grows a condition.
+        "src/connectors/notion.ts": {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        "src/connectors/confluence.ts": {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        "src/connectors/drive.ts": {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         // Who the asking user is, in the source systems' terms. The ACL guard
         // probes with whatever this resolves, so a half-populated identity is
         // another user's view of the corpus.

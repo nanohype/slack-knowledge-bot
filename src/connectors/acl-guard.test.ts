@@ -27,6 +27,56 @@ function stubResponse(init: ResponseInit = { status: 200 }): Response {
 const tokens = async () => "access-token";
 
 describe("createAclGuard", () => {
+  it("redacts a confluence hit whose docId does not parse, without probing", async () => {
+    // Confluence is the only probe that validates its docId shape:
+    // `confluence:<uuid>:<pageId>`, enforced by a regex. notion and drive
+    // `.replace()` a prefix and have no branch here at all — which is why this
+    // one arm was the only unproven path across the three, not a test the
+    // others had and this lacked.
+    //
+    // It is on the anti-leak boundary, so it earns the same treatment as every
+    // other fail-secure arm the guard enforces at 100%: a docId the probe
+    // cannot parse must drop the document, not reach the source system with a
+    // malformed URL and let its response decide.
+    const fetchImpl = vi.fn<typeof fetch>(async () => stubResponse({ status: 200 }));
+    const guard = createAclGuard({ fetchImpl });
+
+    const [verified] = await guard.verify(
+      [hit({ source: "confluence", docId: "confluence:not-a-uuid:123" })],
+      tokens,
+    );
+
+    expect(verified.wasRedacted).toBe(true);
+    expect(verified.accessVerified).toBe(false);
+    // The stub answers 200 to anything. If the guard had probed, the document
+    // would have been marked accessible on a docId it could not even parse —
+    // so asserting the call never happened is the actual control here.
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("redacts a confluence hit when the probe returns 403", async () => {
+    // The other half of confluence's fail-secure contract: a docId that parses
+    // but names a page this user cannot read. Covered for notion already; the
+    // confluence arm was reachable only through its own probe, so it needed its
+    // own case rather than inheriting the sibling's.
+    const fetchImpl = vi.fn<typeof fetch>(async () => stubResponse({ status: 403 }));
+    const guard = createAclGuard({ fetchImpl });
+
+    const [verified] = await guard.verify(
+      [
+        hit({
+          source: "confluence",
+          docId: `confluence:${"0".repeat(8)}-0000-0000-0000-${"0".repeat(12)}:99`,
+        }),
+      ],
+      tokens,
+    );
+
+    expect(verified.wasRedacted).toBe(true);
+    expect(verified.accessVerified).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("marks a hit as accessVerified when the probe returns 200", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => stubResponse({ status: 200 }));
     const guard = createAclGuard({ fetchImpl });
