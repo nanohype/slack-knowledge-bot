@@ -76,7 +76,27 @@ jobs:
       # TS and JSON to biome, and Make requires tabs for recipes and spaces for
       # the continuation lines inside them. A second opinion there would either
       # be wrong or demand churn, so this gate takes the rules nothing else owns.
+      #
+      # The npm package is a shim: on first run it resolves the real binary
+      # through the GitHub releases API with an Octokit client authed from
+      # GITHUB_TOKEN. Unauthenticated, that call is rate-limited by source IP —
+      # shared on a hosted runner with every other Actions customer on the host,
+      # so this step's verdict would depend on strangers' traffic in the
+      # preceding hour. Passing the workflow's own token makes the limit
+      # per-repository instead. It grants nothing extra: the job is already
+      # `contents: read`, and this only proves who is asking.
+      #
+      # EC_VERSION pins the tool. It does NOT avoid the API call — the shim
+      # calls `getLatestRelease` for "latest" and `getReleaseByTag` otherwise,
+      # both REST calls under the same limit — so the token above is what fixes
+      # the flake and this fixes reproducibility: without it CI silently tracks
+      # whatever `latest` becomes, while everything else here is pinned. The
+      # `v` prefix is the upstream tag form, taken from the releases API rather
+      # than inferred.
       - name: Editorconfig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EC_VERSION: v3.11.1
         run: npm run editorconfig
 
       - name: Test
