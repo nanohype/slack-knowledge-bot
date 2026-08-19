@@ -216,6 +216,21 @@ jobs:
           helm template slack-knowledge-bot chart -f chart/values-staging.yaml > rendered/staging.yaml
           helm template slack-knowledge-bot chart -f chart/values-production.yaml > rendered/production.yaml
 
+      # The import-graph test (src/logger.import-graph.test.ts) guards the
+      # mechanism that broke this binary once: a transitive import of the app
+      # config, which exits 1 at module scope on values this Deployment does not
+      # supply. It cannot catch a different mechanism producing the same
+      # outcome — a chart env var dropped, a new module-scope side effect, a
+      # changed entrypoint. So this runs the binary under the env the rendered
+      # chart actually gives it and asserts it reaches ready.
+      #
+      # Hermetic by construction: no AWS credentials are passed. The consumer
+      # fails its first SQS receive with CredentialsProviderError and backs off,
+      # which is correct off-cluster, while still serving /health. The assertion
+      # stops at ready, before any of that.
+      - name: audit-consumer boots under its chart env
+        run: node scripts/smoke-audit-consumer.mjs rendered/staging.yaml
+
       # Source files are gated elsewhere; this asserts the RENDERED chart too —
       # a zero account id, placeholder token, or account-less ARN that only
       # appears after templating.
