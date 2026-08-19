@@ -16,3 +16,7 @@ infra/cdk.out/
 
 # Generated API reference — `npm run docs` output, regenerated on demand.
 docs/api/
+
+# Helm render output — produced by CI and by the audit-consumer boot smoke
+# test; never committed.
+rendered/
