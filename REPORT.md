@@ -132,7 +132,60 @@ is one the gate decides, and that none of the five trees trips a rule — is the
 does not go stale, because the gate now enforces it on every build. The count is evidence
 for a verdict the gate has since taken over.
 
-## 4. Not covered anywhere, and worth carrying to any repository with this shape
+## 4. Adopting `editorconfig-gate` here: no second-order effect, and the failure that ran beside it
+
+For the seats adopting the same action. The short answer is that adoption was inert — the
+step passed on its first run on a runner and changed nothing else — and the failure in that
+same run belonged to something else. Both halves are worth stating, because the second is a
+shape any of these repositories can hit and the first is a hunt none of them needs to start.
+
+**What the action did.** `Editorconfig` passed on the runner on its first execution, in the
+run whose `verify` job failed. Nothing else in the job changed: every other step kept the
+conclusion it had, and `npm ci` resolves the tree without the removed wrapper.
+
+It also changes what `npm run check` can do on an arm64 developer machine. The wrapper asks
+the releases API for `ec-darwin-amd64*`, which resolves nothing on that architecture, so the
+aggregate check exited at that step before reaching the tests. Without it the check runs to
+completion locally — which is a change in what the local command covers, not only in what
+CI does.
+
+**What failed in the same run, and why it is unrelated.** `schemas:freshness:test`, a step
+this repository added one commit earlier, in `9bb6015`. Its fixture builds a git repository,
+and one case clones that repository before deleting a schema from the clone:
+
+```
+git -C .../upstream-removed-0 commit -qm drop a CRD
+Author identity unknown
+fatal: empty ident name (for <runner@...>) not allowed
+```
+
+The fixture wrote `user.email` and `user.name` into the repository it built. A clone
+inherits neither, so the commit fell back to the identity git derives from the username and
+hostname — non-empty on a developer machine, empty on a hosted runner. The gate depended on
+a property of the machine it ran on, and the only machine lacking that property is the one
+whose verdict counts.
+
+The two arrived together for a reason that is about process, not about either change:
+`9bb6015` was pushed without a pull request and so got no CI, which made the adoption commit
+the first run to execute that step at all.
+
+**Two readings to rule out, both checked rather than assumed.** The adoption did not clear
+this failure: it is a defect in a different step, fixed separately in `52f0353` by carrying
+identity and signing as `-c` flags on every git invocation the fixture makes. Nor did the
+adoption expose it by unblocking a job that would otherwise have stopped earlier — the
+tempting story, since the wrapper is reported to fail on linux runners. It does not hold
+here: the `Editorconfig` step succeeded on `main` at `ae7c62b`, so the wrapper was not
+failing this repository's jobs and the freshness step would have been reached either way.
+
+**The transferable part.** A gate that builds a git fixture and then clones it must carry
+identity on the command rather than in a repository's config, because a clone inherits
+config from nothing. The same argument covers `commit.gpgsign`, from the other direction: a
+developer sets it globally and a runner has no agent. Reproduce either with
+`user.useConfigOnly = true`, which is what makes git refuse to guess an identity instead of
+falling back to one — stripping `HOME` and the config files is not enough, and a gate tested
+that way passes while still being broken on a runner.
+
+## 5. Not covered anywhere, and worth carrying to any repository with this shape
 
 The freshness report is not the only prose a reader sees. The scheduled workflow writes a
 remediation block of its own beside it — `.github/workflows/crd-schema-freshness.yml` said
