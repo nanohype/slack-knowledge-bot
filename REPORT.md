@@ -1,7 +1,9 @@
-# Findings that belong to other repositories
+# Findings
 
-Written from `nanohype/slack-knowledge-bot`, branch `crd-freshness`, while closing the
-stale-freshness-instruction item here. Nothing below is edited in this repository.
+Two kinds, kept in one file. Sections 1 to 5 are findings about other repositories, written
+from here and not edited there. Section 6 reads this repository's own open issues against
+the tree, so a premise that has stopped holding is not rediscovered by whoever picks the
+issue up.
 
 ## 1. `library/scripts/sync-vendored.mjs` in `nanohype/nanohype` — the same defect, stronger
 
@@ -196,3 +198,77 @@ later edit can put the placeholder back with `scripts/freshness_test.sh` still g
 The gate here reads that heredoc out of the workflow file and asserts on it, and two of its
 mutants target it. Any repository whose scheduled job composes an issue body around a report
 has the same second surface.
+
+## 6. The open enhancement backlog, read against the tree
+
+Five issues were opened on 20 June from the quality-audit fix pass. #7 is closed by the
+atomic limiter. The other four are read here rather than built; the verdict is whether the
+premise still describes the tree, not whether the work is worth doing.
+
+### #11 — Formatter: parameterize the hardcoded org name — **premise no longer holds**
+
+The issue reports `FOOTER_TEXT` hardcoding a company name inline in user-facing copy. The
+tree has no such string. `src/config/index.ts` declares `ORG_DISPLAY_NAME` with a default of
+`your organization`; `src/index.ts` passes `config.ORG_DISPLAY_NAME` into the query handler,
+which threads it to `footerText(orgDisplayName)` in `src/slack/formatter.ts`. The value is
+declared in `chart/values.yaml` and `.env.example`, and `src/slack/formatter.test.ts`
+asserts the rendered footer does not contain the old brand — so the parameterization has a
+regression test rather than only an absence.
+
+Worth stating plainly because the label undersells it: a brand baked into a reusable
+formatter is an estate value presented as the product's shape, which is a defect class this
+estate has a rule about, not a cosmetic one. It reads as already-fixed rather than as
+never-having-mattered. Close it.
+
+### #9 — pgvector: forward migrations + multi-chunk read-path dedup — **both premises hold**
+
+*No migration story.* `src/rag/backends/pgvector-schema.ts` is create-only: `CREATE
+EXTENSION IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS chunks (... PRIMARY KEY (doc_id,
+chunk_index))`, `CREATE INDEX IF NOT EXISTS`. There is no `schema_migrations` table and no
+`ALTER` anywhere, so a database created under an older single-column primary key keeps it
+and the seeder's `ON CONFLICT (doc_id, chunk_index)` has nothing to match.
+
+*LIMIT before dedup.* `src/rag/backends/pgvector.ts` ends both reads with `ORDER BY ... LIMIT
+$2` and no `DISTINCT ON (doc_id)`, and `rrfFusion` in `src/rag/retriever.ts` keys its map on
+`docId` — after the backend has already truncated. `TOP_K = 20` against `FINAL_K = 10` is a
+widened candidate pool and it narrows the effect without removing it: twenty chunks of one
+document still fill the pool.
+
+Both stay latent for the reason the issue gives — the demo seeder writes one chunk per
+document — so the trigger is an ingester, not a code change here.
+
+### #10 — Generator: add a Bedrock model fallback chain — **premise holds, proposed fix has moved**
+
+`src/rag/generator.ts` still has no fallback: one model call, and a `catch` that returns the
+static "having trouble generating an answer" text and counts the error.
+
+What has changed is where the fix belongs. The issue proposes "a secondary/cheaper model id
+(new optional config)", but the generator no longer holds a model id — it passes
+`deps.llmRoute`, a **route name on the Platform's ModelGateway**, and `chart/values.yaml`
+says so directly: *"Route names on that gateway, not model ids."* The gateway is the
+component that maps a route to a model, which makes model failover a property of the route
+rather than of this application, and a second model id in app config would put routing back
+in the app that was deliberately relieved of it.
+
+Read the issue as still open on the behaviour and stale on the mechanism: the fallback
+belongs in the `ModelGateway` CR, and what may remain here is deciding whether a gateway
+failure should retry a second route at all.
+
+### #12 — OAuth module: wire the provider registry + share root toolchain config — **both premises hold**
+
+*Partially-dead registry.* Every provider module still calls `registerProvider` at import
+(`atlassian.ts`, `slack.ts`, `notion.ts`, `hubspot.ts`), and `packages/oauth/src/oauth/router.ts`
+still resolves from `config.providers` — three times, at the router construction, the
+per-provider lookup and the callback loop. `getProvider` and `listProviders` are exported
+from the package index and unreached by the router, so registration remains a side effect
+nothing consumes.
+
+*Toolchain drift.* `packages/oauth/tsconfig.json` targets ES2024 with `Node16` module
+resolution and sets `isolatedModules` and `rootDir`; the root targets ES2022 with
+`NodeNext`. Neither extends a shared base.
+
+The deferral reason also still holds and is the more interesting half: `packages/oauth` is
+a self-contained scaffold regenerated from the nanohype `module-oauth-delegation` template,
+so "share the root config" partly fights that design. A shared base that the template does
+not know about is re-vendored away on the next regeneration, which makes this a question
+about the template rather than about this repository.
