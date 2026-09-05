@@ -57,18 +57,45 @@ npm run platform:validate   # the gate: digests, then platform.yaml, then a self
 npm run schemas:sync        # re-vendor the copies + digests from the pinned ref
 npm run schemas:check       # blocking drift gate: copies vs upstream at the pinned ref
 npm run schemas:freshness   # scheduled-only: has the pin fallen behind upstream?
+npm run schemas:freshness:test  # assert that report names a command, not a commit
 ```
 
-Upstream resolves two ways, both deterministic. With `$EKS_AGENT_PLATFORM_DIR`
-set the files come from that checkout — under `--check` its HEAD must be the
-pinned commit, so a working tree on some other commit is an error rather than a
-silent substitution. Without it they are fetched from raw.githubusercontent.com
-at the pinned commit. An unreachable upstream is a failure, never a skip.
+Upstream resolves two ways, both deterministic, and both read AT A REF rather
+than from a working tree: `git show <ref>:<path>` against a checkout named by
+`$EKS_AGENT_PLATFORM_DIR`, or raw.githubusercontent.com at that same ref. Under
+`--check` the checkout's HEAD must also be the pinned commit, because CI checks
+that SHA out and a job wired to a different one would be a verdict about
+something other than the pin. An unreachable upstream is a failure, never a skip.
 
 ## Adopting a newer operator API
 
-1. `npm run schemas:sync -- --ref=<40-char-sha>` — moves the pin and rewrites
-   the copies and their digests in one step, so the two cannot drift apart.
+1. `npm run schemas:sync -- --ref=latest` — resolves the newest commit touching
+   `operators/config/crd/bases`, then moves the pin and rewrites the copies and
+   their digests in one step, so the two cannot drift apart. A full 40-character
+   SHA works too, when the target is a specific commit rather than the newest.
+
+   `latest` is what `npm run schemas:freshness` names. That report is copied
+   verbatim into an issue body re-edited weekly and read on whatever day someone
+   opens it, so a commit resolved during one run and printed there is the newest
+   thing upstream for at most a week while being presented as current for as
+   long as the issue stays open — following it re-vendors to the wrong ref and
+   closes an issue that should have stayed open.
+
+   `scripts/freshness-report-test.mjs` runs the report against a fixture upstream
+   repository and asserts on its bytes: none of the commits that fixture built
+   appearing at seven characters or more, no hex run of seven or more carrying a
+   digit whatever commit it belongs to, a remediation naming the command with no
+   placeholder beside it, and that command landing the pin on the fixture's
+   newest commit touching the vendored path. It drives both seams — the checkout,
+   and GitHub through a fetch stub serving the same fixture — because the
+   scheduled workflow reads only the second. `--self-test` removes the fix every
+   way it can come back and fails unless the assertion named for each break is
+   what catches it.
+
+   `latest` refuses a clone that cannot answer for upstream: a shallow one, where
+   every path reads as introduced at the boundary so the pin is current against
+   itself, and one that does not descend from the pin, where `latest` would name
+   something older than what is already vendored.
 2. `npm run platform:validate` — a CRD change that invalidates `platform.yaml`
    surfaces here, before a cluster sees it.
 3. Commit the schema diff, the pin move, and any manifest changes together.
