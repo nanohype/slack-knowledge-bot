@@ -68,36 +68,23 @@ jobs:
         run: npm run format:check
 
       # .editorconfig declares charset, LF endings, a final newline and no
-      # trailing whitespace. Biome formats TS and JSON, so those rules held for
-      # part of the tree and were unobserved everywhere else — YAML, HCL,
-      # Markdown, shell. This checks them across every git-tracked file.
+      # trailing whitespace. Biome formats TS and JSON, so those rules hold for
+      # part of the tree and are unobserved everywhere else — YAML, HCL,
+      # Markdown, shell — unless something reads the whole tree against them.
+      # This does, over every file `git ls-files` names.
       #
-      # Indentation checks stay off: Go answers to gofmt, Terraform to tofu fmt,
-      # TS and JSON to biome, and Make requires tabs for recipes and spaces for
-      # the continuation lines inside them. A second opinion there would either
-      # be wrong or demand churn, so this gate takes the rules nothing else owns.
+      # Indentation is delegated: Go answers to gofmt, Terraform to tofu fmt, TS
+      # and JSON to biome, and Make requires tabs for recipes and spaces for the
+      # continuation lines inside them. A second opinion there would either be
+      # wrong or demand churn, so this takes the rules nothing else owns.
       #
-      # The npm package is a shim: on first run it resolves the real binary
-      # through the GitHub releases API with an Octokit client authed from
-      # GITHUB_TOKEN. Unauthenticated, that call is rate-limited by source IP —
-      # shared on a hosted runner with every other Actions customer on the host,
-      # so this step's verdict would depend on strangers' traffic in the
-      # preceding hour. Passing the workflow's own token makes the limit
-      # per-repository instead. It grants nothing extra: the job is already
-      # `contents: read`, and this only proves who is asking.
-      #
-      # EC_VERSION pins the tool. It does NOT avoid the API call — the shim
-      # calls `getLatestRelease` for "latest" and `getReleaseByTag` otherwise,
-      # both REST calls under the same limit — so the token above is what fixes
-      # the flake and this fixes reproducibility: without it CI silently tracks
-      # whatever `latest` becomes, while everything else here is pinned. The
-      # `v` prefix is the upstream tag form, taken from the releases API rather
-      # than inferred.
+      # It reads the tree and opens no socket, which is the whole reason it is an
+      # action rather than a dependency: a gate on the merge path must not make
+      # its verdict wait on a third party answering. `self-test` defaults on and
+      # runs the gate against crafted trees first, so a gate that has quietly
+      # stopped rejecting fails here rather than passing everything.
       - name: Editorconfig
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EC_VERSION: v3.11.1
-        run: npm run editorconfig
+        uses: nanohype/.github/actions/editorconfig-gate@b2eada74413fcc9f3042f22126ee5b350a2b846e # b2eada7
 
       - name: Test
         # --coverage enforces the thresholds in vitest.config.ts (75/60/75/75
@@ -161,6 +148,36 @@ jobs:
             exit 1
           fi
           echo "Slack WebClient construction invariant holds"
+
+      # The freshness report is copied verbatim into an issue body the scheduled
+      # workflow re-edits weekly and a reader opens on whatever day. A commit id
+      # resolved during one run and printed there is presented as the answer for
+      # as long as the issue stays open, so following it re-vendors to the wrong
+      # ref AND closes an issue that should stay open. This runs the report
+      # against a fixture upstream repository whose history it built, and asserts
+      # on the emitted bytes: exit 2, none of the commits it built appearing at
+      # seven characters or more, no hex run of seven or more carrying a digit
+      # whatever commit it belongs to, a remediation naming `--ref=latest` and no
+      # placeholder beside it, and that command landing the pin on the fixture's
+      # newest commit touching the vendored path. Both seams run it — the
+      # checkout, and GitHub through a fetch stub serving the same fixture — since
+      # the scheduled workflow reads only the second. It also reads the
+      # scheduled workflow's own remediation block, which reaches the same reader
+      # and no assertion on the script can see.
+      - name: The freshness report names a command, not a commit
+        run: npm run schemas:freshness:test
+
+      # The gate's own guards, exercised rather than assumed. It removes the fix
+      # every way the defect can come back — the remediation naming the resolved
+      # commit, the verdict line carrying it abbreviated, the remediation back to
+      # an unfollowable placeholder, `latest` rejected or resolving to the pin or
+      # to the branch tip, a behind pin reporting current, and the workflow's own
+      # block regressing either way — and fails unless the assertion NAMED for
+      # each one is what catches it. A mutant matching its target anything other
+      # than exactly once aborts the run rather than proving the gate rejects
+      # something it was never shown.
+      - name: The freshness gate catches what it claims to
+        run: npm run schemas:freshness:selftest
 
       - name: platform.yaml CRD-schema gate
         # platform.yaml is applied by hand, once, and read by nothing else in

@@ -43,11 +43,21 @@ jobs:
         with:
           node-version: '24'
 
-      # No install step: the script uses only Node built-ins, and reads both
-      # sides from raw.githubusercontent.com — the pinned ref and the default
-      # branch. An unreachable upstream fails rather than reporting "current".
+      # No install step: the script uses only Node built-ins. It resolves the
+      # newest commit touching the vendored path from api.github.com, then reads
+      # both sides from raw.githubusercontent.com — at the pin and at that
+      # commit. An unreachable upstream fails rather than reporting "current".
       - name: Compare the pin against upstream
         id: freshness
+        # The token is a rate limit, not an access grant. Resolving the newest
+        # commit touching the vendored path is an api.github.com call, and
+        # unauthenticated that limit is per source IP — shared on a hosted runner
+        # with every other Actions customer on the host, so this job's verdict
+        # would depend on strangers' traffic in the preceding hour. Authenticated
+        # the limit is per-repository. The job is already `contents: read`; the
+        # commit it resolves is public either way.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
           # Two ways to lose this exit code, and both have to be closed.
@@ -110,9 +120,15 @@ jobs:
           Re-vendor and re-validate:
 
           \`\`\`
-          npm run schemas:sync -- --ref=<sha>
+          npm run schemas:sync -- --ref=latest
           npm run platform:validate
           \`\`\`
+
+          \`latest\` resolves the newest commit touching \`operators/config/crd/bases\` at the moment
+          the re-vendor runs. This body is re-edited weekly and read on whatever day someone opens
+          it, so a commit id here would name the newest thing upstream for at most a week and be
+          presented as current for as long as the issue stayed open — and following it would
+          re-vendor to the wrong ref while closing an issue that should have stayed open.
 
           Read the schema diff before merging — a new constraint upstream usually implies a
           \`platform.yaml\` change here. This issue closes itself once the pin is current.

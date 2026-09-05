@@ -38,7 +38,7 @@ tasks:
   # === TypeScript ===
 
   check:
-    desc: 'App gate: typecheck + lint + format:check + editorconfig + test + platform:validate'
+    desc: 'App gate: typecheck + lint + format:check + test + platform:validate + schemas:freshness:{test,selftest}'
     cmds:
       - npm run check
 
@@ -50,9 +50,9 @@ tasks:
       - npm run platform:validate
 
   schemas:sync:
-    desc: 'Re-vendor schemas/crd/ + digests from the ref pinned in schemas/crd/source.json'
+    desc: 'Re-vendor schemas/crd/ + digests (usage: task schemas:sync -- --ref=<sha>|--ref=latest)'
     cmds:
-      - npm run schemas:sync
+      - npm run schemas:sync -- {{.CLI_ARGS}}
 
   schemas:check:
     desc: 'Verify the vendored CRD schemas against their digests and upstream at the pinned ref'
@@ -63,6 +63,12 @@ tasks:
     desc: 'Report whether the pinned operator ref has fallen behind upstream (never a merge gate)'
     cmds:
       - npm run schemas:freshness
+
+  schemas:freshness:test:
+    desc: 'Assert the freshness report names a command that resolves upstream, not a commit'
+    cmds:
+      - npm run schemas:freshness:test
+      - npm run schemas:freshness:selftest
 
   oauth:
     desc: 'slack-knowledge-bot-oauth package: lint + typecheck + test + build'
