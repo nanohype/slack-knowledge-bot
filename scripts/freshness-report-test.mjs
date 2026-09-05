@@ -92,10 +92,22 @@ const SEAMS = ["checkout", "github"];
 
 const exec = promisify(execFile);
 const digest = (buf) => createHash("sha256").update(buf).digest("hex");
-// `-c` rather than the clone's config, because signing is set globally and this
-// gate runs inside `npm run check`: a developer with `commit.gpgsign = true` and
-// no agent would see the fixture abort in its setup.
-const git = (dir, ...args) => exec("git", ["-C", dir, "-c", "commit.gpgsign=false", ...args]);
+// Identity and signing travel on the command, never in a repository's config.
+// These fixtures get cloned, and a clone inherits neither, so config written into
+// the original leaves a commit in a clone reaching for an ambient identity: one a
+// developer machine has and a CI runner does not, which is a gate that passes
+// everywhere it is written and fails where it runs. Signing is the mirror case —
+// set globally by a developer, absent on a runner — and this gate is inside
+// `npm run check`, so an unusable agent would abort the fixture in its setup.
+const GIT = [
+  "-c",
+  "user.email=gate@localhost",
+  "-c",
+  "user.name=freshness gate",
+  "-c",
+  "commit.gpgsign=false",
+];
+const git = (dir, ...args) => exec("git", ["-C", dir, ...GIT, ...args]);
 
 /** Run a command, returning its output and exit code rather than throwing. */
 async function run(cmd, args, opts) {
@@ -126,8 +138,6 @@ async function buildFixture(scratch, upstreamPath, files) {
   const dir = join(scratch, "upstream");
   await mkdir(join(dir, upstreamPath), { recursive: true });
   await git(scratch, "init", "-q", dir);
-  await git(dir, "config", "user.email", "gate@localhost");
-  await git(dir, "config", "user.name", "freshness gate");
 
   const write = (file, body) => writeFile(join(dir, upstreamPath, file), body);
   const head = async () => (await git(dir, "rev-parse", "HEAD")).stdout.trim();
@@ -364,9 +374,9 @@ async function assertHostileCheckouts(report, work, fx, source, planted) {
   // "no drift" for as long as the clone stays shallow.
   const shallow = join(work, `shallow-${run_}`);
   await mkdir(shallow, { recursive: true });
-  await exec("git", ["-C", shallow, "init", "-q"]);
-  await exec("git", ["-C", shallow, "fetch", "-q", "--depth", "1", fx.dir, fx.pin]);
-  await exec("git", ["-C", shallow, "checkout", "-q", "FETCH_HEAD"]);
+  await git(shallow, "init", "-q");
+  await git(shallow, "fetch", "-q", "--depth", "1", fx.dir, fx.pin);
+  await git(shallow, "checkout", "-q", "FETCH_HEAD");
   const onShallow = await at(shallow);
   record(
     `${label}: a shallow clone is refused, not answered from`,
@@ -379,7 +389,7 @@ async function assertHostileCheckouts(report, work, fx, source, planted) {
   // report's instruction undoing the report's own subject.
   const behind = join(work, `behind-${run_}`);
   await exec("git", ["clone", "-q", "--no-local", fx.dir, behind]);
-  await exec("git", ["-C", behind, "checkout", "-q", fx.older]);
+  await git(behind, "checkout", "-q", fx.older);
   const onBehind = await at(behind);
   record(
     `${label}: a clone that does not descend from the pin is refused`,
@@ -406,16 +416,8 @@ async function assertRemovedUpstream(report, work, fx, source, planted) {
   if (!planted) await report.plant(tree, fx, source);
   const gone = join(work, `upstream-removed-${run_}`);
   await exec("git", ["clone", "-q", "--no-local", fx.dir, gone]);
-  await exec("git", [
-    "-C",
-    gone,
-    "-c",
-    "commit.gpgsign=false",
-    "rm",
-    "-q",
-    `${source.upstream.path}/${source.files[0].file}`,
-  ]);
-  await exec("git", ["-C", gone, "-c", "commit.gpgsign=false", "commit", "-qm", "drop a CRD"]);
+  await git(gone, "rm", "-q", `${source.upstream.path}/${source.files[0].file}`);
+  await git(gone, "commit", "-qm", "drop a CRD");
   await writeFile(join(tree, "fetch-stub.mjs"), FETCH_STUB(gone));
 
   const env = {
