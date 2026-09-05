@@ -62,22 +62,10 @@ function embeddingsRespond(embedding: number[]) {
   });
 }
 
+/** The limiter's script reply: [allowed, remaining, limitType]. */
 function fakeRedisUnderLimit() {
-  const pipeline = {
-    zremrangebyscore: () => pipeline,
-    zcard: () => pipeline,
-    zadd: () => pipeline,
-    expire: () => pipeline,
-    exec: async () =>
-      [
-        [null, 0],
-        [null, 0],
-        [null, 2],
-        [null, 5],
-      ] as Array<[Error | null, unknown]>,
-  };
   return {
-    pipeline: () => pipeline,
+    eval: async () => [1, 17, 0],
     get: async () => null,
     set: async () => "OK" as const,
   };
@@ -269,21 +257,8 @@ describe("query pipeline integration", () => {
   });
 
   it("rate-limit blocked: replies with rate-limit message and does not call downstream", async () => {
-    const pipeline = {
-      zremrangebyscore: () => pipeline,
-      zcard: () => pipeline,
-      zadd: () => pipeline,
-      expire: () => pipeline,
-      exec: async () =>
-        [
-          [null, 0],
-          [null, 0],
-          [null, 25],
-          [null, 5],
-        ] as Array<[Error | null, unknown]>,
-    };
     const redis = {
-      pipeline: () => pipeline,
+      eval: async () => [0, 0, 1],
       get: async () => null,
       set: async () => "OK" as const,
     };
