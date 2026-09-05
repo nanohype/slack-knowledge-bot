@@ -74,7 +74,7 @@ npm run lint           # biome lint .
 npm run format         # biome format --write .
 npm run format:check   # biome format .
 npm run typecheck      # tsc --noEmit
-npm run check          # typecheck + lint + format:check + editorconfig + test + platform:validate + schemas:freshness:{test,selftest} (CI parity)
+npm run check          # typecheck + lint + format:check + test + platform:validate + schemas:freshness:{test,selftest}
 npm run platform:validate    # validate platform.yaml against the vendored CRD schemas, then self-test the gate
 npm run schemas:sync         # re-vendor schemas/crd/ from eks-agent-platform, rewrite the pin + digests
 npm run schemas:sync -- --ref=latest  # adopt the newest operator API: resolve upstream, re-vendor, move the pin
@@ -132,6 +132,7 @@ App-level secrets in deployment live in AWS Secrets Manager at `slack-knowledge-
 - Logs / metrics / traces correlate via OTel `trace_id`; the logger pulls from the active span automatically (no ALS). App stderr → cluster log forwarder → Loki; OTLP → OpenTelemetry Collector gateway → Tempo (traces) + Amazon Managed Prometheus (metrics).
 - Vitest for tests with `globals: true`. `src/test-setup.ts` seeds env vars so the config Zod parse succeeds in the runner.
 - Biome (`biome.json`, extends the vendored org base) for lint + format — `format:check` is part of CI.
+- Biome owns TS and JSON, so the four rules `.editorconfig` declares for *every* file — charset, LF endings, a final newline, no trailing whitespace — are unobserved across YAML, Markdown, shell and chart templates unless something reads the whole tree. The `nanohype/.github` `editorconfig-gate` action does, in the `verify` job, over every file `git ls-files` names. It has no local counterpart and `npm run check` does not carry it: the action reads the tree and opens no socket, which is what keeps a merge from waiting on a third party, and a second copy of that reading here is a copy nothing keeps honest. An editor applies the same four rules from `.editorconfig` on save.
 - Explicit timeouts on every external call (`AbortSignal.timeout` on fetch and Bedrock, `NodeHttpHandler` `requestTimeout`/`connectionTimeout` on AWS SDK clients, ioredis `connectTimeout`/`commandTimeout`).
 - **Ports, not SDK patches.** Every cross-boundary service is a `createXxx(deps)` factory accepting typed ports. Tests inject fakes implementing the typed port. **Never `vi.mock(<sdk-package>)`** — the rule is grep-enforced in CI.
 - Fail-secure as the default failure mode for ACL checks: missing token, error, timeout → the document is dropped from results.

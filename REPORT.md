@@ -119,7 +119,20 @@ names the command AND an unfollowable `<sha>` placeholder beside it; the reader 
 resolve a commit, and the nearest one in view is whatever the last run printed. Portal
 guards its issue body against that shape but not its report. Both are guarded here.
 
-## 3. Not covered anywhere, and worth carrying to any repository with this shape
+## 3. `nanohype/.github` — the adoption table records measurements that nothing keeps true
+
+`REPORT.md` at `b2eada7` gives a per-repository file count in its verification table —
+`slack-knowledge-bot | 196 files, clean`. Reading the same tree on adoption gives 198,
+because two files landed here in between. Nothing was wrong with the count when it was
+taken and nothing keeps it true, so a reader re-running the gate meets a number that
+disagrees with the document and has to work out which of them is stale.
+
+The verdict the table exists to record — that every section of those `.editorconfig` files
+is one the gate decides, and that none of the five trees trips a rule — is the part that
+does not go stale, because the gate now enforces it on every build. The count is evidence
+for a verdict the gate has since taken over.
+
+## 4. Not covered anywhere, and worth carrying to any repository with this shape
 
 The freshness report is not the only prose a reader sees. The scheduled workflow writes a
 remediation block of its own beside it — `.github/workflows/crd-schema-freshness.yml` said
