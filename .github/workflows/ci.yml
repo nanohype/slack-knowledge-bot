@@ -384,6 +384,48 @@ jobs:
         env:
           EKS_AGENT_PLATFORM_DIR: .eks-agent-platform
 
+  live-redis:
+    name: rate limiter against a real Redis
+    runs-on: ubuntu-latest
+    # The limiter decides and spends in one Lua script, and a fake `eval` is a
+    # transcription of that script rather than the script: it cannot fail on Lua
+    # that does not parse, on a `redis.call` with the wrong arity, on an argument
+    # Redis hands over as a string, or on a reply shape the client cannot read.
+    # A server is what produces those, so one runs here.
+    #
+    # On every pull request, unlike the model tier in `evals`. That tier is
+    # dispatch-only because it spends money per run; a Redis container costs a
+    # few seconds, so "needs a live Redis to verify" is a service block rather
+    # than a budget.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        # Without this the job can reach the step before the server accepts
+        # connections, and a suite that cannot connect has verified nothing.
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: The limiter's script, executed by Redis
+        run: npm run test:redis
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+
   docker:
     name: docker build (no push)
     runs-on: ubuntu-latest
@@ -399,6 +441,7 @@ jobs:
         verify,
         docs,
         crd-schema-drift,
+        live-redis,
         docker,
       ]
     # always() is load-bearing: without it a failed dependency SKIPS this job,

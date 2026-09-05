@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "eval": "vitest run --config vitest.eval.config.ts",
+    "test:redis": "vitest run --config vitest.redis.config.ts",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
