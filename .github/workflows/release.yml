@@ -49,10 +49,20 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ steps.ver.outputs.version }}
             ${{ env.IMAGE }}:latest
-      # The cluster verify-images policy admits only images signed by this
-      # repository's release.yml on a tag, and it verifies the digest a
-      # pod resolves to, so the signature, the SBOM and its attestation all
-      # bind to the pushed digest, never to a mutable tag.
+      # The verify-images policy in eks-gitops (policies/kyverno/supply-chain)
+      # matches ghcr.io/nanohype/* and checks the digest a pod resolves to for
+      # a cosign signature and an SPDX SBOM attestation (predicate type
+      # https://spdx.dev/Document, which `cosign attest --type spdxjson`
+      # records). Both must be keyless, from OIDC issuer
+      # https://token.actions.githubusercontent.com, with a Fulcio subject
+      # matching
+      #   ^https://github\.com/nanohype/[^/]+/\.github/workflows/release\.ya?ml@refs/tags/.+$
+      # The [^/]+ admits any nanohype repository, so the trust boundary is the
+      # org's tag-triggered release workflows, not this repository alone. Only
+      # the staging and production overlays deny admission on a failed check;
+      # the base and the development overlay audit. Kyverno pins each matched
+      # image to a digest before verifying it, so the signature, the SBOM and
+      # its attestation all bind to the pushed digest, never to a mutable tag.
       - name: sign (keyless, OIDC)
         env:
           IMAGE_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
