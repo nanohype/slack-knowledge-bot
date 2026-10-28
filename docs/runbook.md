@@ -123,9 +123,9 @@ kubectl -n tenants-slack-knowledge-bot get pods -l app.kubernetes.io/name=slack-
 
 CI lives at `.github/workflows/ci.yml`. Triggers on push to `main` and on PRs targeting `main`. Steps (every gate must exit zero):
 
-1. `actions/checkout@v4`
-2. `actions/setup-node@v4`, node-version `24`, npm cache
-3. `npm install --prefer-offline --no-audit --no-fund` (not `npm ci` — macOS-generated lockfile omits Linux platform-conditional binaries)
+1. `actions/checkout`, pinned by commit SHA
+2. `actions/setup-node`, pinned by commit SHA, with node-version `24` and the npm cache
+3. `npm ci --prefer-offline --no-audit --no-fund`, which fails on a lockfile that disagrees with `package.json` instead of resolving a new tree
 4. `packages/oauth`: install + lint + typecheck + test + build
 5. `npm run audit:prod` (production deps, high severity)
 6. `npm run typecheck`, `npm run lint`, `npm run format:check`
