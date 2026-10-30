@@ -26,6 +26,22 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
+      # npm takes project config only from the nearest directory holding a
+      # package.json, so packages/oauth carries its own copy of the root
+      # .npmrc's release-age floor. This asks npm what each project root
+      # resolves rather than reading the files, so a copy that drifts, a
+      # misspelled key or a missing file fails here instead of leaving one
+      # lockfile under a different floor or none.
+      - name: Both npm project roots resolve one release-age floor
+        run: |
+          root=$(npm config get min-release-age)
+          oauth=$(cd packages/oauth && npm config get min-release-age)
+          if [ "$root" = "null" ] || [ "$root" != "$oauth" ]; then
+            echo "::error::min-release-age resolves to '$root' at the repository root and '$oauth' in packages/oauth. Set the same floor in .npmrc and packages/oauth/.npmrc."
+            exit 1
+          fi
+          echo "Both npm project roots resolve min-release-age=$root"
+
       - name: Install (app)
         # `npm ci`, not `npm install`: the install must fail on a lockfile that
         # disagrees with package.json rather than quietly resolving a new tree,
