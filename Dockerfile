@@ -1,4 +1,4 @@
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Build the slack-knowledge-bot-oauth workspace first — slack-knowledge-bot depends on it via
@@ -17,7 +17,7 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
