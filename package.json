@@ -17,7 +17,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "tsc --noEmit",
-    "docs": "typedoc",
+    "docs": "node scripts/patch-typedoc-minimatch.mjs && typedoc",
     "install:all": "npm ci && npm --prefix packages/oauth ci",
     "build:oauth": "npm --prefix packages/oauth run build",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run platform:validate && npm run schemas:freshness:test && npm run schemas:freshness:selftest",
@@ -66,12 +66,15 @@
     "yaml": "^2.9.0"
   },
   "overrides": {
-    "qs": "^6.15.2",
-    "@grpc/grpc-js": "^1.14.4",
+    "typedoc": {
+      "minimatch": "^11.0.1"
+    },
+    "qs": "^6.16.1",
+    "@grpc/grpc-js": "^1.14.5",
     "protobufjs": "^7.6.5",
-    "vite": "^8.0.16",
+    "vite": "^8.1.6",
     "esbuild": "^0.28.1",
-    "body-parser": "^2.3.0",
+    "body-parser": "^2.4.0",
     "gaxios": "^7.3.0"
   },
   "engines": {
