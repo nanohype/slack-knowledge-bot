@@ -1,7 +1,7 @@
 {
   "name": "slack-knowledge-bot-oauth",
   "version": "0.1.0",
-  "description": "SlackKnowledgeBot per-user OAuth delegation \u2014 scaffolded from nanohype module-oauth-delegation",
+  "description": "SlackKnowledgeBot per-user OAuth delegation — scaffolded from nanohype module-oauth-delegation",
   "type": "module",
   "main": "dist/oauth/index.js",
   "types": "dist/oauth/index.d.ts",
@@ -43,7 +43,7 @@
     "@aws-sdk/client-kms": "^3.1030.0",
     "@biomejs/biome": "2.5.15",
     "@smithy/node-http-handler": "^4.5.2",
-    "@types/node": "^24.12.2",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
     "aws-sdk-client-mock": "^4.1.0",
     "tsx": "^4.21.0",
@@ -55,6 +55,6 @@
     "esbuild": "^0.28.1"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   }
 }

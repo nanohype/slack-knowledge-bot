@@ -2,7 +2,7 @@
  * Thin bridge between node:http and the Web-standard Request/Response
  * that slack-knowledge-bot-oauth's handlers expect.
  *
- * Node 24 has global Request/Response, so construction is native; we just
+ * Node 26 has global Request/Response, so construction is native; we just
  * marshal the headers and the body.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
