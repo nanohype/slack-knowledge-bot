@@ -66,12 +66,12 @@
     "yaml": "^2.9.0"
   },
   "overrides": {
-    "qs": "^6.15.2",
-    "@grpc/grpc-js": "^1.14.4",
+    "qs": "^6.16.1",
+    "@grpc/grpc-js": "^1.14.5",
     "protobufjs": "^7.6.5",
-    "vite": "^8.0.16",
+    "vite": "^8.1.6",
     "esbuild": "^0.28.1",
-    "body-parser": "^2.3.0",
+    "body-parser": "^2.4.0",
     "gaxios": "^7.3.0"
   },
   "engines": {
