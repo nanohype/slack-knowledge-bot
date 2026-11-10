@@ -415,7 +415,7 @@ jobs:
     # than a budget.
     services:
       redis:
-        image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        image: redis:8-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
         ports:
           - 6379:6379
         # Without this the job can reach the step before the server accepts
