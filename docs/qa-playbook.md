@@ -16,7 +16,7 @@ This doc is operator-first: paste-ready commands, exact console click-paths, zer
 | AWS CLI + SSO profile | `aws sso login --profile <name>` |
 | `kubectl` + cluster access | Apply `platform.yaml`, exec into pods, read logs |
 | `argocd` CLI (optional) | Inspect ArgoCD app sync/health from the terminal |
-| Node 24 + npm | Matches the Docker base image and CI runtime |
+| Node 26 + npm | Matches the Docker base image and CI runtime |
 | Slack workspace admin | To create the bot app, enable Socket Mode, install |
 | A public domain you own, with an ACM certificate for it | TLS for the ALB + DNS for the ingress; OAuth providers reject non-HTTPS callbacks |
 | Gmail (or any email) | WorkOS Directory Sync signup |
