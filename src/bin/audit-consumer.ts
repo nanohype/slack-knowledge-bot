@@ -12,11 +12,11 @@
 import * as http from "node:http";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { S3Client } from "@aws-sdk/client-s3";
-import { SQSClient } from "@aws-sdk/client-sqs";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { runAuditConsumer } from "../audit/audit-consumer.js";
 import { logger } from "../logger.js";
 import { counter } from "../metrics.js";
+import { createSqsClient } from "../sqs-client.js";
 
 const PORT = Number.parseInt(process.env.PORT ?? "3001", 10);
 // Required, not defaulted — same tier as the queue URL and table name below.
@@ -39,10 +39,7 @@ for (const [name, value] of Object.entries({
   }
 }
 
-const sqs = new SQSClient({
-  region: AWS_REGION,
-  requestHandler: new NodeHttpHandler({ requestTimeout: 25_000, connectionTimeout: 1_000 }),
-});
+const sqs = createSqsClient({ region: AWS_REGION, requestTimeout: 25_000 });
 const ddb = new DynamoDBClient({
   region: AWS_REGION,
   requestHandler: new NodeHttpHandler({ requestTimeout: 5_000, connectionTimeout: 1_000 }),

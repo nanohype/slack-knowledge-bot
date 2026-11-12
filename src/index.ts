@@ -13,7 +13,6 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import Anthropic from "@anthropic-ai/sdk";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { SQSClient } from "@aws-sdk/client-sqs";
 import { App } from "@slack/bolt";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Pool } from "pg";
@@ -37,12 +36,10 @@ import { createRateLimiter } from "./ratelimit/redis-limiter.js";
 import { getRedis } from "./redis.js";
 import { createDisconnectCommand } from "./slack/disconnect-command.js";
 import { createQueryHandler } from "./slack/query-handler.js";
+import { createSqsClient } from "./sqs-client.js";
 
 const redis = getRedis();
-const sqs = new SQSClient({
-  region: config.AWS_REGION,
-  requestHandler: new NodeHttpHandler({ requestTimeout: 3000, connectionTimeout: 1000 }),
-});
+const sqs = createSqsClient({ region: config.AWS_REGION, requestTimeout: 3000 });
 const ddb = new DynamoDBClient({
   region: config.AWS_REGION,
   requestHandler: new NodeHttpHandler({ requestTimeout: 5000, connectionTimeout: 1000 }),
